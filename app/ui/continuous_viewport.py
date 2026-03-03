@@ -83,11 +83,9 @@ class ContinuousViewport(tk.Frame):
         # keep refs to PhotoImages so they aren't GC'd
         self._photo_refs: dict[int, ImageTk.PhotoImage] = {}
 
-        self._proxy = _PageCanvasProxy(None)  # real canvas set below
-
         # --- widgets ---
         self.canvas = tk.Canvas(self, bg=CANVAS_BG, highlightthickness=0)
-        self._proxy._canvas = self.canvas
+        self._proxy = _PageCanvasProxy(self.canvas)
         self.v_scroll = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self._on_yscroll)
 
@@ -104,6 +102,7 @@ class ContinuousViewport(tk.Frame):
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
         self.canvas.bind("<ButtonPress-3>", self._on_right_click)
+        self.canvas.bind("<Double-Button-1>", self._on_double_click)
 
         self._pending_render = False
 
@@ -326,6 +325,7 @@ class ContinuousViewport(tk.Frame):
         from app.core.annotation_model import (
             RectAnnotation, CircleAnnotation, LineAnnotation,
             HighlightAnnotation, FreetextAnnotation, InkAnnotation,
+            RedactAnnotation, ImageAnnotation,
         )
         doc = self._get_doc()
         if not doc:
@@ -336,15 +336,17 @@ class ContinuousViewport(tk.Frame):
 
         for annot in annotations:
             if isinstance(annot, RectAnnotation):
+                fill = annot.fill_color if annot.fill_color else ""
                 self.canvas.create_rectangle(
                     x_off + annot.x0 * scale, y_off + annot.y0 * scale,
                     x_off + annot.x1 * scale, y_off + annot.y1 * scale,
-                    outline=annot.color, width=annot.border_width, tags=tag)
+                    outline=annot.color, fill=fill, width=annot.border_width, tags=tag)
             elif isinstance(annot, CircleAnnotation):
+                fill = annot.fill_color if annot.fill_color else ""
                 self.canvas.create_oval(
                     x_off + annot.x0 * scale, y_off + annot.y0 * scale,
                     x_off + annot.x1 * scale, y_off + annot.y1 * scale,
-                    outline=annot.color, width=annot.border_width, tags=tag)
+                    outline=annot.color, fill=fill, width=annot.border_width, tags=tag)
             elif isinstance(annot, LineAnnotation):
                 self.canvas.create_line(
                     x_off + annot.x0 * scale, y_off + annot.y0 * scale,
@@ -375,6 +377,42 @@ class ContinuousViewport(tk.Frame):
                     self.canvas.create_line(
                         *coords, fill=annot.color,
                         width=annot.border_width, smooth=True, tags=tag)
+            elif isinstance(annot, RedactAnnotation):
+                # Red striped overlay for pending redaction
+                self.canvas.create_rectangle(
+                    x_off + annot.x0 * scale, y_off + annot.y0 * scale,
+                    x_off + annot.x1 * scale, y_off + annot.y1 * scale,
+                    fill="#ED4245", outline="#ED4245", width=2,
+                    stipple="gray50", tags=tag)
+            elif isinstance(annot, ImageAnnotation):
+                # Show image preview or placeholder
+                ix0 = x_off + annot.x0 * scale
+                iy0 = y_off + annot.y0 * scale
+                ix1 = x_off + annot.x1 * scale
+                iy1 = y_off + annot.y1 * scale
+                try:
+                    from PIL import Image
+                    img = Image.open(annot.image_path)
+                    w = max(1, int(ix1 - ix0))
+                    h = max(1, int(iy1 - iy0))
+                    img = img.resize((w, h), Image.LANCZOS)
+                    photo = ImageTk.PhotoImage(img)
+                    # store ref to prevent GC
+                    if not hasattr(self, '_annot_photo_refs'):
+                        self._annot_photo_refs = {}
+                    key = f"img_{page_num}_{id(annot)}"
+                    self._annot_photo_refs[key] = photo
+                    self.canvas.create_image(
+                        ix0, iy0, anchor="nw", image=photo, tags=tag)
+                except Exception:
+                    # Fallback: dashed rect with [IMG] label
+                    self.canvas.create_rectangle(
+                        ix0, iy0, ix1, iy1,
+                        outline="#4A9EFF", width=2, dash=(6, 3), tags=tag)
+                    self.canvas.create_text(
+                        (ix0 + ix1) / 2, (iy0 + iy1) / 2,
+                        text="[IMG]", fill="#4A9EFF",
+                        font=("Segoe UI", 10), tags=tag)
 
     # ------------------------------------------------------------------
     # event handlers
@@ -401,6 +439,15 @@ class ContinuousViewport(tk.Frame):
         self._render_visible_pages()
 
     def _on_mousewheel(self, event):
+        # Check if Ctrl is held (state bit 0x0004 on Windows/Linux)
+        if event.state & 0x0004:
+            # Ctrl+Scroll = zoom (fallback for systems where Control-MouseWheel doesn't fire)
+            if event.delta > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+            self.app_ref.update_status()
+            return "break"
         self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
 
     def _on_ctrl_mousewheel(self, event):
@@ -481,6 +528,45 @@ class ContinuousViewport(tk.Frame):
             mw = self.app_ref.main_window
             if hasattr(mw, 'context_menu'):
                 mw.context_menu.show(event.x_root, event.y_root)
+
+    def _on_double_click(self, event):
+        """Double-click to edit existing FreetextAnnotation."""
+        from app.core.annotation_model import FreetextAnnotation
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+
+        page_num = self._page_at(cy)
+        if page_num is None:
+            return
+
+        doc = self._get_doc()
+        if not doc or not doc.is_open:
+            return
+
+        x_off = self._page_x_offset(page_num)
+        y_off = self._page_layout[page_num][0]
+        scale = get_render_scale(self.zoom)
+
+        # find FreetextAnnotation under cursor
+        px = (cx - x_off) / scale
+        py = (cy - y_off) / scale
+
+        annotations = doc.get_pending_annotations(page_num)
+        for annot in reversed(annotations):
+            if isinstance(annot, FreetextAnnotation):
+                if abs(px - annot.x) < 30 and abs(py - annot.y) < 20:
+                    # open edit dialog
+                    from app.ui.dialogs.text_input_dialog import TextInputDialog
+                    dialog = TextInputDialog(self.app_ref)
+                    dialog._entry.insert(0, annot.text)
+                    dialog._entry.select_range(0, "end")
+                    dialog.title("Edit Text")
+                    self.app_ref.wait_window(dialog)
+                    if dialog.result:
+                        annot.text = dialog.result
+                        doc.modified = True
+                        self.render_current_page()
+                    return "break"
 
     def _page_at(self, cy: float) -> int | None:
         for pn, (y_off, pw, ph) in enumerate(self._page_layout):

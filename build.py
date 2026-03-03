@@ -17,8 +17,8 @@ import platform
 
 
 APP_NAME = "DocView"
-ENTRY_POINT = "pdf_paint.py"
-ICON = None  # Set to icon path if you have one, e.g. "assets/icon.ico"
+ENTRY_POINT = "main.py"
+ICON = "assets/docview.ico"
 
 
 def check_pyinstaller():
@@ -35,12 +35,18 @@ def clean_build():
     """Remove previous build artifacts."""
     for d in ["build", "dist", "__pycache__"]:
         if os.path.exists(d):
-            shutil.rmtree(d)
-            print(f"  Cleaned: {d}/")
+            try:
+                shutil.rmtree(d, ignore_errors=True)
+                print(f"  Cleaned: {d}/")
+            except Exception as e:
+                print(f"  Warning: could not fully clean {d}/ ({e})")
     for f in [f"{APP_NAME}.spec"]:
         if os.path.exists(f):
-            os.remove(f)
-            print(f"  Cleaned: {f}")
+            try:
+                os.remove(f)
+                print(f"  Cleaned: {f}")
+            except Exception as e:
+                print(f"  Warning: could not remove {f} ({e})")
 
 
 def build(onedir=False):
@@ -68,20 +74,22 @@ def build(onedir=False):
     hidden_imports = [
         "fitz",
         "fitz.fitz",
-        "PyQt5",
-        "PyQt5.QtWidgets",
-        "PyQt5.QtCore",
-        "PyQt5.QtGui",
+        "customtkinter",
+        "tkinter",
         "PIL",
         "PIL.Image",
+        "PIL.ImageTk",
     ]
     for hi in hidden_imports:
         cmd.extend(["--hidden-import", hi])
 
     # Include the app/ directory as data
+    sep = ";" if platform.system() == "Windows" else ":"
     if os.path.exists("app"):
-        sep = ";" if platform.system() == "Windows" else ":"
         cmd.extend(["--add-data", f"app{sep}app"])
+    # Include assets (icon, etc.)
+    if os.path.exists("assets"):
+        cmd.extend(["--add-data", f"assets{sep}assets"])
 
     if ICON and os.path.exists(ICON):
         cmd.extend(["--icon", ICON])

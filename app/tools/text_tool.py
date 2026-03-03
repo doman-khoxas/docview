@@ -33,5 +33,7 @@ class TextTool(BaseTool):
                 text_color=self.properties.stroke_color,
                 opacity=self.properties.opacity,
             )
-            self.app_ref.pdf_doc.add_pending_annotation(self.viewport.current_page, annot)
+            page_num = self.viewport.current_page
+            self.app_ref.pdf_doc.add_pending_annotation(page_num, annot)
+            self.app_ref.push_undo(page_num, annot)
             self.viewport.render_current_page()

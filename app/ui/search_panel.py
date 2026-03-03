@@ -1,10 +1,16 @@
-"""Ctrl+F search bar with prev/next result navigation."""
+"""DocView search bar — Ctrl+F with prev/next result navigation."""
 import customtkinter as ctk
+from app.config import (
+    BG_SURFACE, BG_ABYSS, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
+    ACCENT, ACCENT_MUTED, BG_HOVER, BG_ACTIVE, CORNER_RADIUS
+)
 
 
 class SearchPanel(ctk.CTkFrame):
     def __init__(self, parent, app_ref):
-        super().__init__(parent, height=36, fg_color=("gray90", "gray20"))
+        super().__init__(parent, height=36, fg_color=BG_SURFACE,
+                         border_color=BORDER_SUBTLE, border_width=1,
+                         corner_radius=CORNER_RADIUS)
         self.app_ref = app_ref
         self.pack_propagate(False)
         self._results: list[tuple[int, list]] = []  # [(page_num, [Rect,...]), ...]
@@ -13,28 +19,48 @@ class SearchPanel(ctk.CTkFrame):
 
         self._entry_var = ctk.StringVar()
         self._entry = ctk.CTkEntry(self, textvariable=self._entry_var,
-                                   width=250, height=28, placeholder_text="Search...")
+                                   width=250, height=28, placeholder_text="Search...",
+                                   fg_color=BG_ABYSS, border_color=BORDER_SUBTLE,
+                                   text_color=TEXT_PRIMARY,
+                                   font=ctk.CTkFont(family="Segoe UI", size=12))
         self._entry.pack(side="left", padx=(8, 4), pady=4)
         self._entry.bind("<Return>", lambda e: self._do_search())
 
         search_btn = ctk.CTkButton(self, text="Find", width=50, height=26,
+                                   fg_color=ACCENT_MUTED, hover_color=ACCENT,
+                                   text_color=TEXT_PRIMARY,
+                                   font=ctk.CTkFont(family="Segoe UI", size=11),
+                                   corner_radius=4,
                                    command=self._do_search)
         search_btn.pack(side="left", padx=2)
 
         prev_btn = ctk.CTkButton(self, text="<", width=28, height=26,
+                                 fg_color="transparent", hover_color=BG_ACTIVE,
+                                 text_color=TEXT_SECONDARY,
+                                 font=ctk.CTkFont(family="Segoe UI", size=11),
+                                 corner_radius=4,
                                  command=self._prev_result)
         prev_btn.pack(side="left", padx=1)
 
         next_btn = ctk.CTkButton(self, text=">", width=28, height=26,
+                                 fg_color="transparent", hover_color=BG_ACTIVE,
+                                 text_color=TEXT_SECONDARY,
+                                 font=ctk.CTkFont(family="Segoe UI", size=11),
+                                 corner_radius=4,
                                  command=self._next_result)
         next_btn.pack(side="left", padx=1)
 
-        self._count_label = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=11))
+        self._count_label = ctk.CTkLabel(self, text="",
+                                         font=ctk.CTkFont(family="Segoe UI", size=11),
+                                         text_color=TEXT_MUTED)
         self._count_label.pack(side="left", padx=8)
 
         close_btn = ctk.CTkButton(self, text="x", width=26, height=26,
                                   fg_color="transparent",
-                                  hover_color=("gray75", "gray35"),
+                                  hover_color=BG_ACTIVE,
+                                  text_color=TEXT_SECONDARY,
+                                  font=ctk.CTkFont(family="Segoe UI", size=11),
+                                  corner_radius=4,
                                   command=self.close)
         close_btn.pack(side="right", padx=4)
 

@@ -55,6 +55,8 @@ class HighlightTool(BaseTool):
             opacity=self.properties.opacity,
             quads=quads,
         )
-        doc.add_pending_annotation(self.viewport.current_page, annot)
+        page_num = self.viewport.current_page
+        doc.add_pending_annotation(page_num, annot)
+        self.app_ref.push_undo(page_num, annot)
         self.viewport.render_current_page()
         self._start = None

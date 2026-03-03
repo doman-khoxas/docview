@@ -1,54 +1,16 @@
 # DocView
 
-**MS Paint-inspired PDF Editor with Redaction, OCR & Full Annotation Suite**
+**Professional PDF Viewer, Editor & Annotator**
 
-Built by Operator Systems // BLACK TECH WIZARD
+Built with CustomTkinter + PyMuPDF. Dark theme. Ribbon UI. Zero bloat.
 
 ---
 
 ## Overview
 
-DocView is a cross-platform PDF editing tool with a Windows 7 Paint-style ribbon interface. It supports freehand drawing, shapes, text annotations, document redaction, and OCR via ocrmypdf. It also ships with a full CLI mode for headless operation in Claude Code and automation pipelines.
+DocView is a lightweight, full-featured PDF editor designed to replace Adobe Reader and PDFgear. Built on a modular CustomTkinter architecture with a PyMuPDF engine, it offers professional-grade annotation, page management, compression, digital signatures, and redaction in a clean dark interface.
 
-**Version 1.0**
-
-## Architecture
-
-DocView ships with two interface options, both powered by PyMuPDF:
-
-| Entry Point | Stack | Best For |
-|-------------|-------|----------|
-| `pdf_paint.py` | PyQt5 | Primary — Paint-style ribbon UI, redaction, OCR, CLI mode |
-| `main.py` + `app/` | CustomTkinter | Alternative — multi-tab editor with continuous viewport |
-
-## Features
-
-### GUI Mode (pdf_paint.py)
-- Windows 7 ribbon-style toolbar with grouped tool sections
-- **Drawing Tools**: Pen, Highlighter, Eraser, Text
-- **Shapes**: Rectangle, Circle, Line, Arrow
-- **Redaction**: Area select (draw rectangles), text search redaction, preview before apply
-- **OCR**: Full document OCR via ocrmypdf with language support
-- **Text Extraction**: Pull text from any page
-- **Color Picker** and adjustable pen sizes
-- **Zoom**: 25% to 400%
-- **Page Navigation**: Multi-page support with prev/next
-- **Keyboard Shortcuts**: Ctrl+O, Ctrl+S, Ctrl+Z, Ctrl+/- zoom
-
-### CLI Mode (for Claude Code)
-```bash
-# Redact an area
-python pdf_paint.py --cli -i doc.pdf --redact "page:1,x:50,y:100,w:200,h:30" -o redacted.pdf
-
-# Redact by text search
-python pdf_paint.py --cli -i doc.pdf --redact-text "SSN" -o redacted.pdf
-
-# Run OCR
-python pdf_paint.py --cli -i scanned.pdf --ocr -o searchable.pdf
-
-# Extract text
-python pdf_paint.py --cli -i doc.pdf --extract-text all
-```
+**Version 2.0.0** — Codename: *Brutalist*
 
 ## Quick Start
 
@@ -56,97 +18,138 @@ python pdf_paint.py --cli -i doc.pdf --extract-text all
 # Install dependencies
 pip install -r requirements.txt
 
-# Launch GUI
-python pdf_paint.py
+# Launch
+python main.py
 
 # Open a specific file
-python pdf_paint.py document.pdf
-
-# CLI mode (headless)
-python pdf_paint.py --cli -i input.pdf --ocr -o output.pdf
+python main.py document.pdf
 ```
 
-## Build Executable
-
-Package everything into a single standalone executable:
+## Build Standalone Executable
 
 ```bash
-# Install build dependency
+# One-click build (Windows)
+docview-build.bat
+
+# Manual build
 pip install pyinstaller
-
-# Build single executable
-python build.py
-
-# Build as directory bundle (faster startup)
-python build.py --onedir
-
-# Clean + build
-python build.py --clean
+python build.py           # Single executable
+python build.py --onedir  # Directory bundle (faster startup)
+python build.py --clean   # Clean + build
 ```
 
-Output lands in `dist/DocView` (or `dist/DocView.exe` on Windows). No Python installation needed on the target machine.
+Output: `dist/DocView.exe` — no Python needed on target machine.
 
-## Requirements
+## Features
 
-- Python 3.9+
-- PyQt5 >= 5.15
-- PyMuPDF >= 1.23
-- ocrmypdf >= 16.0 (for OCR)
-- Pillow >= 10.0
+**Viewing**: Multi-document tabs, continuous viewport, page shadows, fit-to-width zoom, Ctrl+scroll zoom, keyboard navigation (arrows, PgUp/PgDn, Home/End), search (Ctrl+F).
+
+**Annotations**: Freehand pen, highlighter, rectangle, circle, line, text box, image insertion. All with configurable color, opacity, border width, font size via properties panel. Undo/Redo (Ctrl+Z/Y). Double-click to edit text annotations.
+
+**Page Management**: PDFgear-style Page tab with: New PDF, Insert Pages from file, Insert Blank Page, Extract Pages (dialog with range selection, one-PDF or separate-PDFs mode, delete-after-extraction), Delete Pages, Rotate Left/Right. Page range input field (eg. 1,8,10-12). Document overview grid with multi-select and drag-and-drop reorder.
+
+**Compression**: Downscales large embedded images via Pillow + PDF-level garbage collection, deflate, and stream cleanup. Shows before/after size comparison.
+
+**Security**: Redaction tool with preview and batch apply. Metadata stripping (OPSEC: removes author, title, dates, XMP). Digital signatures via PFX/P12 certificates (endesive) or visible stamp.
+
+**Printing**: Ctrl+P sends to OS print system.
+
+## Version Management
+
+```bash
+python update.py status              # Show version + features
+python update.py bump patch          # 2.0.0 -> 2.0.1
+python update.py bump minor          # 2.0.0 -> 2.1.0
+python update.py bump major          # 2.0.0 -> 3.0.0
+python update.py changelog "message" # Add changelog entry
+python update.py release minor "msg" # Full release prep
+python update.py history             # Show changelog
+```
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Ctrl+O | Open file |
+| Ctrl+S | Save |
+| Ctrl+Shift+S | Save As |
+| Ctrl+W | Close tab |
+| Ctrl+Z | Undo |
+| Ctrl+Y / Ctrl+Shift+Z | Redo |
+| Ctrl+F | Search |
+| Ctrl+P | Print |
+| Ctrl+B | Toggle sidebar |
+| Ctrl+Scroll | Zoom in/out |
+| Ctrl+Plus/Minus | Zoom in/out |
+| Left/Right | Previous/Next page |
+| PgUp/PgDn | Previous/Next page |
+| Home/End | First/Last page |
+| Up/Down | Scroll viewport |
+| Delete | Delete selected annotation |
+| Escape | Deselect tool / close overlay |
 
 ## Project Structure
 
 ```
 docview/
-├── pdf_paint.py          # v2: PyQt5 Paint-style editor (GUI + CLI)
-├── main.py               # v1: CustomTkinter editor entry point
+├── main.py                  # Entry point with crash logging
+├── update.py                # Version management utility
+├── build.py                 # PyInstaller build script
+├── docview-build.bat        # One-click Windows build
+├── docview.bat              # Quick-launch batch
+├── requirements.txt         # Dependencies
+├── CHANGELOG.md             # Version history
 ├── app/
-│   ├── app.py            # v1 root application
-│   ├── config.py         # Shared constants
+│   ├── app.py               # Root CTk application
+│   ├── config.py            # Theme colors, geometry, defaults
+│   ├── version.py           # Semantic version + feature flags
+│   ├── document_manager.py  # Multi-tab document management
+│   ├── recent_files.py      # MRU file list
 │   ├── core/
-│   │   ├── pdf_document.py
-│   │   ├── pdf_renderer.py
-│   │   ├── annotation_model.py
-│   │   └── page_operations.py
+│   │   ├── pdf_document.py      # PyMuPDF wrapper + annotation storage
+│   │   ├── pdf_renderer.py      # Page rendering + thumbnails
+│   │   ├── annotation_model.py  # Annotation types + PDF commit
+│   │   └── page_operations.py   # Merge, split, rotate, compress
 │   ├── tools/
-│   │   ├── base_tool.py
-│   │   ├── freehand_tool.py
-│   │   ├── highlight_tool.py
-│   │   ├── text_tool.py
-│   │   ├── rect_tool.py
-│   │   ├── circle_tool.py
-│   │   ├── line_tool.py
-│   │   ├── select_tool.py
-│   │   └── hand_tool.py
+│   │   ├── base_tool.py         # Abstract base for all tools
+│   │   ├── select_tool.py       # Select + move annotations
+│   │   ├── hand_tool.py         # Pan viewport
+│   │   ├── text_tool.py         # Text box annotations
+│   │   ├── freehand_tool.py     # Freehand pen drawing
+│   │   ├── highlight_tool.py    # Highlight regions
+│   │   ├── rect_tool.py         # Rectangle annotations
+│   │   ├── circle_tool.py       # Circle annotations
+│   │   ├── line_tool.py         # Line annotations
+│   │   ├── image_tool.py        # Image insertion
+│   │   └── redact_tool.py       # Redaction rectangles
 │   └── ui/
-│       ├── main_window.py
-│       ├── toolbar.py
-│       ├── sidebar.py
-│       ├── continuous_viewport.py
-│       ├── tab_bar.py
-│       ├── properties_panel.py
-│       ├── search_panel.py
-│       ├── status_bar.py
-│       └── dialogs/
-├── build.py              # PyInstaller build script → single executable
-├── requirements.txt
-├── .gitignore
-├── SETUP_REPO.sh         # One-click GitHub repo creation
-└── README.md
+│       ├── main_window.py       # Layout: sidebar + viewport + panels
+│       ├── toolbar.py           # Ribbon toolbar (Home/Edit/Page/Tools)
+│       ├── sidebar.py           # Thumbnail sidebar with context menu
+│       ├── continuous_viewport.py # PDF page rendering canvas
+│       ├── tab_bar.py           # Multi-document tab strip
+│       ├── overview_panel.py    # Page grid with drag-drop reorder
+│       ├── properties_panel.py  # Annotation property editor
+│       ├── search_panel.py      # Find in document
+│       ├── status_bar.py        # Page info + zoom + sidebar toggle
+│       ├── welcome_screen.py    # Empty state landing
+│       ├── context_menu.py      # Right-click menus
+│       ├── extract_dialog.py    # PDFgear-style extract pages dialog
+│       ├── sign_dialog.py       # Digital signature dialog
+│       ├── about_dialog.py      # Version + feature info
+│       └── dialogs/             # Additional dialog windows
+└── assets/
+    ├── docview.ico              # Application icon
+    └── generate_icon.py         # Icon generation script
 ```
 
-## Changelog
+## Requirements
 
-### v1.0 — DocView (Current)
-- Windows 7 Paint-style ribbon toolbar (PyQt5)
-- Full annotation suite: Pen, Highlighter, Eraser, Text, Shapes
-- Redaction tool (area select + text search)
-- OCR integration via ocrmypdf
-- CLI mode for Claude Code headless operation
-- Text extraction from any page
-- PyInstaller single-executable packaging (cross-platform)
-- Multi-tab modular editor (CustomTkinter alternative)
-- UX Design Critique Checklist template
+- Python 3.10+
+- PyMuPDF >= 1.23
+- CustomTkinter >= 5.2.0
+- Pillow >= 10.0
+- (Optional) endesive + cryptography — for cryptographic PDF signing
 
 ## License
 

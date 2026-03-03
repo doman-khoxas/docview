@@ -39,7 +39,10 @@ class CircleTool(BaseTool):
             opacity=self.properties.opacity,
             x0=x0, y0=y0, x1=x1, y1=y1,
             border_width=self.properties.border_width,
+            fill_color=self.properties.fill_color,
         )
-        self.app_ref.pdf_doc.add_pending_annotation(self.viewport.current_page, annot)
+        page_num = self.viewport.current_page
+        self.app_ref.pdf_doc.add_pending_annotation(page_num, annot)
+        self.app_ref.push_undo(page_num, annot)
         self.viewport.render_current_page()
         self._start = None

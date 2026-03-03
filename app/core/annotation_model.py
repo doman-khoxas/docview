@@ -6,7 +6,7 @@ import fitz
 @dataclass
 class AnnotationBase:
     page_num: int
-    color: str = "#FF0000"
+    color: str = "#4A9EFF"
     opacity: float = 1.0
 
 
@@ -60,6 +60,26 @@ class FreetextAnnotation(AnnotationBase):
 class InkAnnotation(AnnotationBase):
     points: list = field(default_factory=list)  # list of (x, y) tuples
     border_width: float = 2
+
+
+@dataclass
+class ImageAnnotation(AnnotationBase):
+    """Embedded image placed on a page."""
+    x0: float = 0
+    y0: float = 0
+    x1: float = 0
+    y1: float = 0
+    image_path: str = ""  # filesystem path to image file
+
+
+@dataclass
+class RedactAnnotation(AnnotationBase):
+    """Pending redaction rectangle — applied permanently via page.apply_redactions()."""
+    x0: float = 0
+    y0: float = 0
+    x1: float = 0
+    y1: float = 0
+    color: str = "#000000"  # redact fill color (black)
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
@@ -124,3 +144,16 @@ def commit_to_pdf(page: fitz.Page, annotation):
             annot.set_colors(stroke=_hex_to_rgb(annotation.color))
             annot.set_opacity(annotation.opacity)
             annot.update()
+
+    elif isinstance(annotation, ImageAnnotation):
+        if annotation.image_path:
+            rect = fitz.Rect(annotation.x0, annotation.y0, annotation.x1, annotation.y1)
+            page.insert_image(rect, filename=annotation.image_path)
+
+    elif isinstance(annotation, RedactAnnotation):
+        # Redactions are handled separately via page.apply_redactions().
+        # If commit_to_pdf is called on a RedactAnnotation, it means
+        # the user saved without applying — add as a visual redact annot
+        # so it persists in the PDF and can be applied later.
+        rect = fitz.Rect(annotation.x0, annotation.y0, annotation.x1, annotation.y1)
+        page.add_redact_annot(rect, fill=_hex_to_rgb(annotation.color))

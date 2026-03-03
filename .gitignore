@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.spec
 .env
 .venv/
 venv/
@@ -13,3 +14,4 @@ venv/
 Thumbs.db
 *.bak
 *.tmp
+node_modules/

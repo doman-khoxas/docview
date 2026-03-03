@@ -60,7 +60,9 @@ class FreehandTool(BaseTool):
             points=list(self._points),
             border_width=self.properties.border_width,
         )
-        self.app_ref.pdf_doc.add_pending_annotation(self.viewport.current_page, annot)
+        page_num = self.viewport.current_page
+        self.app_ref.pdf_doc.add_pending_annotation(page_num, annot)
+        self.app_ref.push_undo(page_num, annot)
         self.viewport.render_current_page()
         self._points.clear()
         self._canvas_points.clear()

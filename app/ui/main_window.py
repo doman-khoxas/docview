@@ -9,6 +9,8 @@ from app.ui.status_bar import StatusBar
 from app.ui.welcome_screen import WelcomeScreen
 from app.ui.search_panel import SearchPanel
 from app.ui.context_menu import ContextMenu
+from app.ui.overview_panel import OverviewPanel
+from app.config import BG_ABYSS, CORNER_RADIUS, BORDER_DEFAULT, BG_SURFACE
 
 
 class MainWindow:
@@ -29,19 +31,25 @@ class MainWindow:
         self.status_bar.pack(fill="x", side="bottom")
 
         # ── middle area: sidebar | viewport + search | properties ──
-        self.middle_frame = ctk.CTkFrame(root, fg_color="transparent")
+        # Enforce pure black background and sharp corners
+        self.middle_frame = ctk.CTkFrame(root, fg_color=BG_ABYSS, corner_radius=CORNER_RADIUS)
         self.middle_frame.pack(fill="both", expand=True)
 
         # sidebar (left)
         self.sidebar = Sidebar(self.middle_frame, app_ref)
         self.sidebar.pack(side="left", fill="y")
 
+        # Vertical separator between sidebar and viewport
+        self._sidebar_sep = ctk.CTkFrame(
+            self.middle_frame, width=1, fg_color=BORDER_DEFAULT, corner_radius=0)
+        self._sidebar_sep.pack(side="left", fill="y")
+
         # properties panel (right, starts hidden)
         self.properties_panel = PropertiesPanel(self.middle_frame, app_ref)
         # don't pack yet — shown on annotation tool select
 
         # center container for search + viewport/welcome
-        self._center = ctk.CTkFrame(self.middle_frame, fg_color="transparent")
+        self._center = ctk.CTkFrame(self.middle_frame, fg_color=BG_ABYSS, corner_radius=CORNER_RADIUS)
         self._center.pack(side="left", fill="both", expand=True)
 
         # search panel (above viewport, initially hidden)
@@ -56,6 +64,9 @@ class MainWindow:
 
         # context menu
         self.context_menu = ContextMenu(app_ref)
+
+        # overview panel (floats over center area)
+        self.overview_panel = OverviewPanel(self._center, app_ref)
 
         self._doc_open = False
 

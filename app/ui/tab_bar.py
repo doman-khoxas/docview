@@ -1,12 +1,16 @@
 """Horizontal document tabs with click-to-switch and close button."""
 import customtkinter as ctk
 from pathlib import Path
-from app.config import TAB_HEIGHT, TAB_MAX_TITLE_LEN
+from app.config import (
+    TAB_HEIGHT, TAB_MAX_TITLE_LEN,
+    BG_PANEL, BG_SURFACE, BG_ACTIVE, ACCENT, ACCENT_MUTED,
+    TEXT_PRIMARY, TEXT_SECONDARY, BORDER_SUBTLE
+)
 
 
 class TabBar(ctk.CTkFrame):
     def __init__(self, parent, app_ref):
-        super().__init__(parent, height=TAB_HEIGHT, fg_color=("gray85", "gray20"))
+        super().__init__(parent, height=TAB_HEIGHT, fg_color=BG_PANEL)
         self.app_ref = app_ref
         self.pack_propagate(False)
         self._tab_buttons: list[ctk.CTkFrame] = []
@@ -25,7 +29,9 @@ class TabBar(ctk.CTkFrame):
 
         frame = ctk.CTkFrame(
             self, height=TAB_HEIGHT - 4,
-            fg_color=("white", "gray30") if is_active else ("gray90", "gray22"),
+            fg_color=BG_SURFACE if is_active else BG_PANEL,
+            border_color=ACCENT if is_active else BORDER_SUBTLE,
+            border_width=1 if is_active else 0,
             corner_radius=4)
         frame.pack(side="left", padx=(2, 0), pady=2)
         frame.pack_propagate(False)
@@ -36,19 +42,22 @@ class TabBar(ctk.CTkFrame):
         if tab.pdf_doc.modified:
             name = "* " + name
 
-        label = ctk.CTkLabel(frame, text=name, font=ctk.CTkFont(size=11),
-                             cursor="hand2", padx=8)
+        label = ctk.CTkLabel(
+            frame, text=name,
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=TEXT_PRIMARY if is_active else TEXT_SECONDARY,
+            cursor="hand2", padx=8)
         label.pack(side="left", fill="y")
         label.bind("<Button-1>", lambda e, idx=index: self._on_click(idx))
 
         close_btn = ctk.CTkButton(
-            frame, text="x", width=18, height=18, font=ctk.CTkFont(size=10),
-            fg_color="transparent", hover_color=("gray70", "gray45"),
+            frame, text="x", width=18, height=18,
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            fg_color="transparent", hover_color=BG_ACTIVE,
+            text_color=TEXT_SECONDARY,
             command=lambda idx=index: self._on_close(idx))
         close_btn.pack(side="right", padx=(0, 2))
 
-        # set fixed width
-        frame.configure(width=label.cget("font").cget("size") * len(name) // 2 + 50)
         frame.configure(width=min(200, max(80, len(name) * 8 + 40)))
 
         self._tab_buttons.append(frame)
