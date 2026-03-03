@@ -105,6 +105,9 @@ class ContinuousViewport(tk.Frame):
         self.canvas.bind("<Double-Button-1>", self._on_double_click)
 
         self._pending_render = False
+        self._pending_configure = None  # debounce handle for configure events
+        self._pending_zoom = None       # debounce handle for zoom operations
+        self._last_canvas_w = 0         # track width to skip no-op configures
 
     # ------------------------------------------------------------------
     # public API (called by tools, toolbar, app)
@@ -160,13 +163,20 @@ class ContinuousViewport(tk.Frame):
         old_zoom = self.zoom
         self.zoom = max(ZOOM_MIN, min(zoom, ZOOM_MAX))
         if self.zoom != old_zoom:
-            self._page_cache.clear()
-            self._drawn_pages.clear()
-            self._photo_refs.clear()
-            self._compute_layout()
-            self.canvas.delete("all")
-            # restore scroll to same page
-            self.go_to_page(self.current_page)
+            # Debounce zoom: defer the expensive re-render until scroll stops
+            if self._pending_zoom is not None:
+                self.after_cancel(self._pending_zoom)
+            self._pending_zoom = self.after(100, self._apply_zoom)
+
+    def _apply_zoom(self):
+        """Deferred zoom execution — runs once after rapid scroll stops."""
+        self._pending_zoom = None
+        self._page_cache.clear()
+        self._drawn_pages.clear()
+        self._photo_refs.clear()
+        self._compute_layout()
+        self.canvas.delete("all")
+        self.go_to_page(self.current_page)
 
     def zoom_in(self):
         self.set_zoom(self.zoom + ZOOM_STEP)
@@ -432,6 +442,19 @@ class ContinuousViewport(tk.Frame):
         self._render_visible_pages()
 
     def _on_configure(self, event):
+        # Debounce configure events — only re-render after resizing stops
+        new_w = self.canvas.winfo_width()
+        new_h = self.canvas.winfo_height()
+        if new_w == self._last_canvas_w and new_h == getattr(self, '_last_canvas_h', 0):
+            return  # no actual size change
+        self._last_canvas_w = new_w
+        self._last_canvas_h = new_h
+        if self._pending_configure is not None:
+            self.after_cancel(self._pending_configure)
+        self._pending_configure = self.after(80, self._do_configure)
+
+    def _do_configure(self):
+        self._pending_configure = None
         self._compute_layout()
         self._drawn_pages.clear()
         self._photo_refs.clear()

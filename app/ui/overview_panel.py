@@ -12,7 +12,8 @@ from app.core.pdf_renderer import render_thumbnail
 
 _THUMB_SIZE = 160
 _COLS = 4
-_DRAG_THRESHOLD = 8  # pixels before drag starts
+_DRAG_THRESHOLD = 8   # pixels before drag starts
+_RENDER_BATCH = 8     # pages per batch in grid rendering
 
 
 class OverviewPanel(ctk.CTkFrame):
@@ -160,14 +161,28 @@ class OverviewPanel(ctk.CTkFrame):
         if not doc or not doc.is_open:
             return
 
-        row_frame = None
-        for i in range(doc.page_count):
+        self._grid_doc = doc
+        self._grid_total = doc.page_count
+        self._grid_index = 0
+        self._grid_row_frame = None
+        # Render in batches of _BATCH_SIZE to keep UI responsive
+        self._render_grid_batch()
+
+    def _render_grid_batch(self):
+        """Render a batch of grid cells, then schedule more via after_idle."""
+        doc = getattr(self, '_grid_doc', None)
+        if not doc or not doc.is_open:
+            return
+        total = self._grid_total
+        end = min(self._grid_index + _RENDER_BATCH, total)
+
+        for i in range(self._grid_index, end):
             col = i % _COLS
             if col == 0:
-                row_frame = ctk.CTkFrame(self._scroll, fg_color="transparent")
-                row_frame.pack(pady=4)
+                self._grid_row_frame = ctk.CTkFrame(self._scroll, fg_color="transparent")
+                self._grid_row_frame.pack(pady=4)
 
-            cell = ctk.CTkFrame(row_frame, fg_color=BG_PANEL,
+            cell = ctk.CTkFrame(self._grid_row_frame, fg_color=BG_PANEL,
                                 corner_radius=CORNER_RADIUS,
                                 border_width=2, border_color=BORDER_SUBTLE)
             cell.pack(side="left", padx=6, pady=4)
@@ -201,6 +216,14 @@ class OverviewPanel(ctk.CTkFrame):
                 text_color=TEXT_SECONDARY
             )
             num.pack(pady=(0, 4))
+
+        self._grid_index = end
+        if self._grid_index < total:
+            # Schedule next batch — lets the event loop breathe
+            self.after(10, self._render_grid_batch)
+        else:
+            # All pages rendered, update selection visuals
+            self._update_selection_visuals()
 
     def _bind_page_events(self, widget, page_num: int):
         """Bind press/drag/release for both click actions and drag-drop reorder."""

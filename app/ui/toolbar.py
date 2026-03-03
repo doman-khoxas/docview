@@ -160,6 +160,7 @@ class Toolbar(ctk.CTkFrame):
         g_sys = self._group(p, "File")
         self._rb(g_sys, "\u2750", "Open", self.app_ref.open_file_dialog).pack(side="left", padx=1)
         self._rb(g_sys, "\u2913", "Save", self.app_ref.save_file).pack(side="left", padx=1)
+        self._rb(g_sys, "\u2912", "Save As", self.app_ref.save_file_as, width=60).pack(side="left", padx=1)
         self._rb(g_sys, "\u2399", "Print", self.app_ref.print_document, width=56).pack(side="left", padx=1)
 
         self._separator(p)

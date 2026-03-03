@@ -105,8 +105,9 @@ class Sidebar(ctk.CTkFrame):
 
     def refresh(self):
         self._refresh_thumbnails()
-        self._refresh_bookmarks()
-        self._refresh_annotations()
+        # Defer non-visible tab refreshes to avoid blocking the main thread
+        self.after_idle(self._refresh_bookmarks)
+        self.after_idle(self._refresh_annotations)
 
     def _refresh_thumbnails(self):
         for _, widget in self._thumbnails:
