@@ -40,6 +40,30 @@ python build.py --clean   # Clean + build
 
 Output: `dist/DocView.exe` — no Python needed on target machine.
 
+## Set as Default PDF Application
+
+```bash
+# Register DocView as a PDF handler (current user, no admin needed)
+python install.py
+
+# Or double-click:
+install.bat
+
+# Register for all users (requires admin)
+python install.py --system
+
+# Check registration status
+python install.py --status
+
+# Remove file associations
+python install.py --uninstall
+# Or double-click: uninstall.bat
+```
+
+After registering, go to **Windows Settings > Default Apps**, search for `.pdf`, and select **DocView**. You can also right-click any PDF > **Open With** > **DocView**.
+
+The installer auto-detects whether to use the built `dist/DocView.exe` or the source `main.py` via `pythonw.exe`.
+
 ## Features
 
 **Viewing**: Multi-document tabs, continuous viewport, page shadows, fit-to-width zoom, Ctrl+scroll zoom, keyboard navigation (arrows, PgUp/PgDn, Home/End), search (Ctrl+F).
@@ -93,6 +117,9 @@ python update.py history             # Show changelog
 ```
 docview/
 ├── main.py                  # Entry point with crash logging
+├── install.py               # File association installer (Windows)
+├── install.bat              # Double-click to register as PDF handler
+├── uninstall.bat            # Double-click to remove associations
 ├── update.py                # Version management utility
 ├── build.py                 # PyInstaller build script
 ├── docview-build.bat        # One-click Windows build
