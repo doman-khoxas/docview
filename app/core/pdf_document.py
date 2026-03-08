@@ -1,6 +1,9 @@
 """Wraps pymupdf.Document with pending annotation storage."""
 import fitz
 from pathlib import Path
+from app.logger import get_logger, log_exception
+
+logger = get_logger(__name__)
 
 
 class PDFDocument:
@@ -46,9 +49,11 @@ class PDFDocument:
         self._file_path = file_path
         self._pending_annotations.clear()
         self._modified = False
+        logger.info("Document opened: %s (%d pages)", Path(file_path).name, self._doc.page_count)
 
     def close(self):
         if self._doc:
+            logger.info("Document closed: %s", self.file_name)
             self._doc.close()
             self._doc = None
         self._file_path = None
@@ -82,6 +87,9 @@ class PDFDocument:
 
     def commit_annotations(self):
         from app.core.annotation_model import commit_to_pdf
+        total = sum(len(a) for a in self._pending_annotations.values())
+        if total:
+            logger.info("Committing %d pending annotation(s) to PDF", total)
         for page_num, annotations in self._pending_annotations.items():
             if annotations:
                 page = self.get_page(page_num)
@@ -97,11 +105,14 @@ class PDFDocument:
         if save_path == self._file_path:
             try:
                 self._doc.saveIncr()
+                logger.info("Document saved (incremental): %s", save_path)
             except Exception:
                 self._doc.save(save_path, garbage=4, deflate=True)
+                logger.info("Document saved (full rewrite): %s", save_path)
         else:
             self._doc.save(save_path)
             self._file_path = save_path
+            logger.info("Document saved to new path: %s", save_path)
         self._modified = False
 
     def save_as(self, file_path: str, flatten: bool = False):

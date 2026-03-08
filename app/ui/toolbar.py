@@ -1,4 +1,4 @@
-"""Ribbon-style toolbar inspired by PDFgear / Windows 11 Paint."""
+"""Sleek ribbon toolbar — modern, minimal, user-friendly layout."""
 import customtkinter as ctk
 from app.config import (
     BG_ABYSS, BG_PANEL, BORDER_RED, TEXT_RED,
@@ -7,43 +7,49 @@ from app.config import (
     BG_ACTIVE, ACCENT_MUTED, BORDER_DEFAULT, BORDER_SUBTLE,
     COLOR_DANGER, BG_HOVER
 )
+from app.logger import get_logger, log_exception
+
+logger = get_logger(__name__)
 
 _TAB_CATEGORIES = ["Home", "Edit", "Page", "Tools"]
 
-# Symbol size — large enough to be instantly recognizable
-_SYM_SIZE = 20
-_LBL_SIZE = 10
-_BTN_HEIGHT = 58
+# Refined sizing — taller buttons, cleaner spacing
+_SYM_SIZE = 18
+_LBL_SIZE = 9
+_BTN_HEIGHT = 56
 
 
 class _RibbonButton(ctk.CTkFrame):
-    """Compound ribbon button: big symbol on top, small label below."""
+    """Sleek ribbon button: icon above, label below, smooth hover."""
 
     def __init__(self, parent, symbol: str, label: str, command=None,
-                 width=64, tool_name=None):
-        super().__init__(parent, fg_color="transparent", corner_radius=4,
+                 width=58, tool_name=None, accent=False, danger=False):
+        super().__init__(parent, fg_color="transparent", corner_radius=6,
                          width=width, height=_BTN_HEIGHT,
-                         border_width=1, border_color=BG_SURFACE)
+                         border_width=0)
         self.pack_propagate(False)
         self._command = command
         self._tool_name = tool_name
         self._default_fg = "transparent"
+        self._accent = accent
+        self._danger = danger
+
+        sym_color = ACCENT if accent else (COLOR_DANGER if danger else TEXT_PRIMARY)
 
         self._sym = ctk.CTkLabel(
             self, text=symbol,
             font=ctk.CTkFont(family="Segoe UI Symbol", size=_SYM_SIZE),
-            text_color=TEXT_PRIMARY, cursor="hand2"
+            text_color=sym_color, cursor="hand2"
         )
-        self._sym.pack(expand=True, pady=(4, 0))
+        self._sym.pack(expand=True, pady=(6, 0))
 
         self._lbl = ctk.CTkLabel(
             self, text=label,
             font=ctk.CTkFont(family="Segoe UI", size=_LBL_SIZE),
-            text_color=TEXT_SECONDARY, cursor="hand2"
+            text_color=TEXT_MUTED, cursor="hand2"
         )
-        self._lbl.pack(pady=(0, 3))
+        self._lbl.pack(pady=(0, 4))
 
-        # Bind click on the whole widget + children
         for widget in [self, self._sym, self._lbl]:
             widget.bind("<Button-1>", self._on_click)
             widget.bind("<Enter>", self._on_enter)
@@ -56,17 +62,21 @@ class _RibbonButton(ctk.CTkFrame):
     def _on_enter(self, event=None):
         if self.cget("fg_color") != ACCENT_MUTED:
             self.configure(fg_color=BG_HOVER)
+            self._lbl.configure(text_color=TEXT_SECONDARY)
 
     def _on_leave(self, event=None):
         if self.cget("fg_color") != ACCENT_MUTED:
             self.configure(fg_color=self._default_fg)
+            self._lbl.configure(text_color=TEXT_MUTED)
 
     def set_active(self, active: bool):
         if active:
-            self.configure(fg_color=ACCENT_MUTED, border_color=ACCENT)
+            self.configure(fg_color=ACCENT_MUTED)
+            self._lbl.configure(text_color=ACCENT)
         else:
-            self.configure(fg_color="transparent", border_color=BG_SURFACE)
+            self.configure(fg_color="transparent")
             self._default_fg = "transparent"
+            self._lbl.configure(text_color=TEXT_MUTED)
 
 
 class Toolbar(ctk.CTkFrame):
@@ -80,31 +90,34 @@ class Toolbar(ctk.CTkFrame):
         )
         self.app_ref = app_ref
 
-        # --- Row 1: Tab Strip ---
-        self._tab_row = ctk.CTkFrame(self, height=32, fg_color=BG_PANEL, corner_radius=0,
-                                      border_width=0)
+        # --- Row 1: Tab Strip (pill-style tabs) ---
+        self._tab_row = ctk.CTkFrame(self, height=34, fg_color=BG_PANEL, corner_radius=0)
         self._tab_row.pack(fill="x")
         self._tab_row.pack_propagate(False)
 
-        # Thin accent line between tab strip and ribbon
-        ctk.CTkFrame(self, height=1, fg_color=BORDER_DEFAULT, corner_radius=0).pack(fill="x")
+        # Left spacer
+        ctk.CTkFrame(self._tab_row, width=8, fg_color="transparent").pack(side="left")
 
         self._cat_buttons: dict[str, ctk.CTkButton] = {}
         for cat in _TAB_CATEGORIES:
             btn = ctk.CTkButton(
-                self._tab_row, text=cat, width=80, height=32,
-                font=ctk.CTkFont(family="Segoe UI", size=12),
+                self._tab_row, text=cat, width=72, height=28,
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
                 fg_color="transparent",
-                text_color=TEXT_SECONDARY,
-                hover_color=BG_ACTIVE,
-                corner_radius=0,
+                text_color=TEXT_MUTED,
+                hover_color=BG_HOVER,
+                corner_radius=6,
                 command=lambda c=cat: self._switch_category(c)
             )
-            btn.pack(side="left")
+            btn.pack(side="left", padx=2, pady=3)
             self._cat_buttons[cat] = btn
 
+        # Accent underline
+        self._accent_line = ctk.CTkFrame(self, height=2, fg_color=ACCENT, corner_radius=0)
+        self._accent_line.pack(fill="x")
+
         # --- Row 2: Ribbon Panel ---
-        self._ribbon = ctk.CTkFrame(self, height=86, fg_color=BG_SURFACE, corner_radius=0)
+        self._ribbon = ctk.CTkFrame(self, height=80, fg_color=BG_SURFACE, corner_radius=0)
         self._ribbon.pack(fill="x")
         self._ribbon.pack_propagate(False)
 
@@ -119,195 +132,230 @@ class Toolbar(ctk.CTkFrame):
         self._active_cat = None
         self._switch_category("Home")
 
-    # --- Button factory ---
+    # ------------------------------------------------------------------
+    # Factories
+    # ------------------------------------------------------------------
+
     def _rb(self, parent, symbol: str, label: str,
-            command=None, tool_name=None, width=64) -> _RibbonButton:
-        """Create a ribbon button with large symbol + small label."""
+            command=None, tool_name=None, width=58,
+            accent=False, danger=False) -> _RibbonButton:
         cmd = command if command else (lambda t=tool_name: self._set_tool(t))
         btn = _RibbonButton(parent, symbol, label, command=cmd,
-                            width=width, tool_name=tool_name)
+                            width=width, tool_name=tool_name,
+                            accent=accent, danger=danger)
         if tool_name is not None:
             self._tool_buttons[tool_name] = btn
         return btn
 
-    def _separator(self, parent):
-        """Thin vertical separator line between groups (like PDFgear)."""
-        sep = ctk.CTkFrame(parent, width=1, fg_color=BORDER_DEFAULT, corner_radius=0)
-        sep.pack(side="left", fill="y", padx=6, pady=8)
+    def _sep(self, parent):
+        """Thin vertical separator."""
+        sep = ctk.CTkFrame(parent, width=1, fg_color=BORDER_SUBTLE, corner_radius=0)
+        sep.pack(side="left", fill="y", padx=8, pady=12)
         return sep
 
     def _group(self, parent, title: str) -> ctk.CTkFrame:
-        """Tool group with bottom label — no border, clean spacing."""
+        """Tool group with subtle bottom label."""
         outer = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        outer.pack(side="left", padx=2, pady=2, fill="y")
+        outer.pack(side="left", padx=1, pady=1, fill="y")
 
         content = ctk.CTkFrame(outer, fg_color="transparent", corner_radius=0)
-        content.pack(side="top", fill="both", expand=True, padx=2, pady=(4, 0))
+        content.pack(side="top", fill="both", expand=True, padx=2, pady=(2, 0))
 
         ctk.CTkLabel(
-            outer, text=title,
-            font=ctk.CTkFont(family="Segoe UI", size=9), text_color=TEXT_MUTED
+            outer, text=title.upper(),
+            font=ctk.CTkFont(family="Segoe UI", size=8, weight="bold"),
+            text_color=TEXT_MUTED
         ).pack(side="bottom", pady=(0, 2))
 
         return content
 
-    # --- Tab Layouts ---
+    # ------------------------------------------------------------------
+    # Tab Panels — reorganized for better workflow
+    # ------------------------------------------------------------------
+
     def _build_home_panel(self):
+        """Home: File ops, view controls, navigation — the essentials."""
         p = ctk.CTkFrame(self._ribbon, fg_color="transparent")
         self._panels["Home"] = p
 
-        # File group
-        g_sys = self._group(p, "File")
-        self._rb(g_sys, "\u2750", "Open", self.app_ref.open_file_dialog).pack(side="left", padx=1)
-        self._rb(g_sys, "\u2913", "Save", self.app_ref.save_file).pack(side="left", padx=1)
-        self._rb(g_sys, "\u2912", "Save As", self.app_ref.save_file_as, width=60).pack(side="left", padx=1)
-        self._rb(g_sys, "\u2399", "Print", self.app_ref.print_document, width=56).pack(side="left", padx=1)
+        # File group — most used actions first
+        g = self._group(p, "File")
+        self._rb(g, "\u2750", "Open", self.app_ref.open_file_dialog, accent=True).pack(side="left", padx=1)
+        self._rb(g, "\u2913", "Save", self.app_ref.save_file).pack(side="left", padx=1)
+        self._rb(g, "\u2912", "Save As", self.app_ref.save_file_as, width=54).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Edit group
-        g_edit = self._group(p, "Edit")
-        self._rb(g_edit, "\u21B6", "Undo", self.app_ref.undo, width=52).pack(side="left", padx=1)
-        self._rb(g_edit, "\u21B7", "Redo", self.app_ref.redo, width=52).pack(side="left", padx=1)
+        # Undo/Redo
+        g = self._group(p, "Edit")
+        self._rb(g, "\u21B6", "Undo", self.app_ref.undo, width=50).pack(side="left", padx=1)
+        self._rb(g, "\u21B7", "Redo", self.app_ref.redo, width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # View group
-        g_view = self._group(p, "View")
-        self._rb(g_view, "\u2296", "Out", self._zoom_out, width=48).pack(side="left", padx=1)
+        # Zoom — compact inline with label
+        g = self._group(p, "Zoom")
+        self._rb(g, "\u2212", "Out", self._zoom_out, width=42).pack(side="left", padx=1)
 
         self.zoom_label = ctk.CTkLabel(
-            g_view, text="100%", width=48,
+            g, text="100%", width=46,
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             text_color=TEXT_PRIMARY
         )
         self.zoom_label.pack(side="left", padx=2)
 
-        self._rb(g_view, "\u2295", "In", self._zoom_in, width=48).pack(side="left", padx=1)
-        self._rb(g_view, "\u2922", "Fit", self._zoom_fit, width=48).pack(side="left", padx=1)
+        self._rb(g, "+", "In", self._zoom_in, width=42).pack(side="left", padx=1)
+        self._rb(g, "\u2922", "Fit", self._zoom_fit, width=42).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Navigate group
-        g_nav = self._group(p, "Navigate")
-        self._rb(g_nav, "\u25C0", "Prev", self._prev_page, width=48).pack(side="left", padx=1)
-        self._rb(g_nav, "\u25B6", "Next", self._next_page, width=48).pack(side="left", padx=1)
+        # Navigate
+        g = self._group(p, "Navigate")
+        self._rb(g, "\u25C0", "Prev", self._prev_page, width=46).pack(side="left", padx=1)
+        self._rb(g, "\u25B6", "Next", self._next_page, width=46).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Mode group
-        g_mode = self._group(p, "Mode")
-        self._rb(g_mode, "\u2710", "Select", tool_name="select", width=56).pack(side="left", padx=1)
-        self._rb(g_mode, "\u270B", "Hand", tool_name="hand", width=56).pack(side="left", padx=1)
+        # Mode
+        g = self._group(p, "Mode")
+        self._rb(g, "\u2710", "Select", tool_name="select", width=54).pack(side="left", padx=1)
+        self._rb(g, "\u270B", "Hand", tool_name="hand", width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Info group
-        g_info = self._group(p, "Info")
-        self._rb(g_info, "\u24D8", "About", command=self._show_about, width=52).pack(side="left", padx=1)
+        # Print + Theme + About
+        g = self._group(p, "More")
+        self._rb(g, "\u2399", "Print", self.app_ref.print_document, width=50).pack(side="left", padx=1)
+        self._rb(g, "\u263E", "Theme", command=self._toggle_theme, width=50).pack(side="left", padx=1)
+        self._rb(g, "\u24D8", "About", command=self._show_about, width=50).pack(side="left", padx=1)
 
     def _build_edit_panel(self):
+        """Edit: All annotation/drawing tools in one view."""
         p = ctk.CTkFrame(self._ribbon, fg_color="transparent")
         self._panels["Edit"] = p
 
-        # Draw group
-        g_draw = self._group(p, "Draw")
-        self._rb(g_draw, "\u270E", "Pen", tool_name="freehand", width=56).pack(side="left", padx=1)
-        self._rb(g_draw, "\u2591", "Highlight", tool_name="highlight", width=64).pack(side="left", padx=1)
+        # Draw
+        g = self._group(p, "Draw")
+        self._rb(g, "\u270E", "Pen", tool_name="freehand", accent=True).pack(side="left", padx=1)
+        self._rb(g, "\u2591", "Highlight", tool_name="highlight", width=62).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Shapes group
-        g_shapes = self._group(p, "Shapes")
-        self._rb(g_shapes, "\u25AD", "Rect", tool_name="rect", width=56).pack(side="left", padx=1)
-        self._rb(g_shapes, "\u25EF", "Circle", tool_name="circle", width=56).pack(side="left", padx=1)
-        self._rb(g_shapes, "\u2571", "Line", tool_name="line", width=56).pack(side="left", padx=1)
+        # Markup
+        g = self._group(p, "Markup")
+        self._rb(g, "\u0332A\u0332", "Underline", tool_name="underline", width=62).pack(side="left", padx=1)
+        self._rb(g, "\u0336A\u0336", "Strike", tool_name="strikeout", width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Text group
-        g_text = self._group(p, "Text")
-        self._rb(g_text, "A", "Text", tool_name="text", width=56).pack(side="left", padx=1)
+        # Shapes — all together
+        g = self._group(p, "Shapes")
+        self._rb(g, "\u25AD", "Rect", tool_name="rect", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u25EF", "Circle", tool_name="circle", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2571", "Line", tool_name="line", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2794", "Arrow", tool_name="arrow", width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Insert group
-        g_insert = self._group(p, "Insert")
-        self._rb(g_insert, "\u2316", "Image", tool_name="image", width=56).pack(side="left", padx=1)
+        # Text + Image + Notes
+        g = self._group(p, "Insert")
+        self._rb(g, "A", "Text", tool_name="text", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2316", "Image", tool_name="image", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2709", "Note", tool_name="sticky_note", width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2318", "Stamp", tool_name="stamp", width=50).pack(side="left", padx=1)
 
     def _build_page_panel(self):
-        """PDFgear-style Page tab: manage pages, extract, delete, rotate, insert."""
+        """Page: Page management, rotation, optimization."""
         p = ctk.CTkFrame(self._ribbon, fg_color="transparent")
         self._panels["Page"] = p
 
-        # New/Insert group
-        g_new = self._group(p, "Insert")
-        self._rb(g_new, "\u2795", "New PDF", command=self._new_document, width=64).pack(side="left", padx=1)
-        self._rb(g_new, "\u2913", "Insert", command=self._insert_pages_from_file, width=56).pack(side="left", padx=1)
-        self._rb(g_new, "\u25A1", "Blank", command=self._insert_blank, width=56).pack(side="left", padx=1)
+        # Create
+        g = self._group(p, "Create")
+        self._rb(g, "\u2795", "New", command=self._new_document, accent=True, width=50).pack(side="left", padx=1)
+        self._rb(g, "\u25A1", "Blank", command=self._insert_blank, width=50).pack(side="left", padx=1)
+        self._rb(g, "\u2913", "Insert", command=self._insert_pages_from_file, width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Extract/Delete group
-        g_manage = self._group(p, "Manage")
-        self._rb(g_manage, "\u2702", "Extract", command=self._extract_pages, width=64).pack(side="left", padx=1)
-        self._rb(g_manage, "\u2717", "Delete", command=self._delete_pages_mode, width=56).pack(side="left", padx=1)
+        # Manage
+        g = self._group(p, "Manage")
+        self._rb(g, "\u2702", "Extract", command=self._extract_pages, width=56).pack(side="left", padx=1)
+        self._rb(g, "\u21E9", "Export", command=self._export_as_image, width=52).pack(side="left", padx=1)
+        self._rb(g, "\u2717", "Delete", command=self._delete_pages_mode, danger=True, width=52).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Rotate group
-        g_rot = self._group(p, "Rotate")
-        self._rb(g_rot, "\u21BA", "Left", command=self._rotate_left, width=52).pack(side="left", padx=1)
-        self._rb(g_rot, "\u21BB", "Right", command=self._rotate_right, width=52).pack(side="left", padx=1)
+        # Rotate
+        g = self._group(p, "Rotate")
+        self._rb(g, "\u21BA", "Left", command=self._rotate_left, width=46).pack(side="left", padx=1)
+        self._rb(g, "\u21BB", "Right", command=self._rotate_right, width=46).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Compress group
-        g_compress = self._group(p, "Optimize")
-        self._rb(g_compress, "\u2318", "Compress", command=self._compress_document, width=68).pack(side="left", padx=1)
+        # Optimize
+        g = self._group(p, "Optimize")
+        self._rb(g, "\u2318", "Compress", command=self._compress_document, width=64).pack(side="left", padx=1)
+        self._rb(g, "\u2756", "Watermark", command=self._add_watermark, width=68).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Page range input (like PDFgear's "eg.1,8,10-12" field)
-        g_range = self._group(p, "Page Range")
+        # Page range (inline)
+        g = self._group(p, "Page Range")
         self._page_range_var = ctk.StringVar(value="")
         range_entry = ctk.CTkEntry(
-            g_range, textvariable=self._page_range_var,
-            width=120, height=28, placeholder_text="eg. 1,8,10-12",
-            fg_color=BG_PANEL, border_color=BORDER_DEFAULT,
+            g, textvariable=self._page_range_var,
+            width=110, height=26, placeholder_text="1,8,10-12",
+            fg_color=BG_PANEL, border_color=BORDER_SUBTLE,
             text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="Segoe UI", size=11),
             corner_radius=4
         )
         range_entry.pack(side="left", padx=4, pady=8)
         range_entry.bind("<Return>", lambda e: self._apply_page_range())
-
-        self._rb(g_range, "\u2713", "Apply", command=self._apply_page_range, width=52).pack(side="left", padx=1)
+        self._rb(g, "\u2713", "Go", command=self._apply_page_range, width=42, accent=True).pack(side="left", padx=1)
 
     def _build_tools_panel(self):
+        """Tools: Security, redaction, signatures."""
         p = ctk.CTkFrame(self._ribbon, fg_color="transparent")
         self._panels["Tools"] = p
 
-        # Redaction group
-        g_sec = self._group(p, "Redaction")
-        self._rb(g_sec, "\u2588", "Redact", tool_name="redact").pack(side="left", padx=1)
-        self._rb(g_sec, "\u2713", "Apply", command=self._on_apply_redactions).pack(side="left", padx=1)
-        self._rb(g_sec, "\u2717", "Clear", command=self._on_clear_redactions).pack(side="left", padx=1)
+        # Redaction
+        g = self._group(p, "Redaction")
+        self._rb(g, "\u2588", "Redact", tool_name="redact", danger=True).pack(side="left", padx=1)
+        self._rb(g, "\u2713", "Apply", command=self._on_apply_redactions, accent=True, width=52).pack(side="left", padx=1)
+        self._rb(g, "\u2717", "Clear", command=self._on_clear_redactions, width=50).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # Security group
-        g_sign = self._group(p, "Security")
-        self._rb(g_sign, "\u270D", "Sign", command=self._sign_document, width=56).pack(side="left", padx=1)
-        self._rb(g_sign, "\u2327", "Strip\nMeta", command=self._strip_metadata, width=56).pack(side="left", padx=1)
+        # Security
+        g = self._group(p, "Security")
+        self._rb(g, "\u26BF", "Protect", command=self._protect_document, accent=True).pack(side="left", padx=1)
+        self._rb(g, "\u270D", "Sign", command=self._sign_document).pack(side="left", padx=1)
+        self._rb(g, "\u2327", "Strip\nMeta", command=self._strip_metadata, width=54).pack(side="left", padx=1)
 
-        self._separator(p)
+        self._sep(p)
 
-        # OCR group
-        g_ocr = self._group(p, "OCR")
-        self._rb(g_ocr, "\u2399", "OCR", command=lambda: print("OCR Placeholder")).pack(side="left", padx=1)
+        # Forms
+        g = self._group(p, "Forms")
+        self._rb(g, "\u2610", "Fill\nForms", command=self._toggle_form_fill, accent=True, width=54).pack(side="left", padx=1)
+        self._rb(g, "\u2713", "Save\nFields", command=self._save_form_fields, width=54).pack(side="left", padx=1)
 
-    # --- Logic ---
+        self._sep(p)
+
+        # OCR
+        g = self._group(p, "OCR")
+        self._rb(g, "\u2399", "OCR", command=self._run_ocr).pack(side="left", padx=1)
+
+        self._sep(p)
+
+        # Text Editing
+        g = self._group(p, "Edit Text")
+        self._rb(g, "\u2710", "Find &\nReplace", command=self._find_replace, width=60).pack(side="left", padx=1)
+
+    # ------------------------------------------------------------------
+    # Tab switching
+    # ------------------------------------------------------------------
+
     def _switch_category(self, cat: str):
         if self._active_cat == cat:
             return
@@ -315,9 +363,9 @@ class Toolbar(ctk.CTkFrame):
 
         for c, btn in self._cat_buttons.items():
             if c == cat:
-                btn.configure(fg_color=BG_SURFACE, text_color=ACCENT)
+                btn.configure(fg_color=BG_ACTIVE, text_color=ACCENT)
             else:
-                btn.configure(fg_color="transparent", text_color=TEXT_SECONDARY)
+                btn.configure(fg_color="transparent", text_color=TEXT_MUTED)
 
         for c, panel in self._panels.items():
             if c == cat:
@@ -337,7 +385,6 @@ class Toolbar(ctk.CTkFrame):
         self.zoom_label.configure(text=f"{int(zoom * 100)}%")
 
     def highlight_tool(self, tool_name: str | None):
-        """Highlights the active tool button."""
         for name, btn in self._tool_buttons.items():
             btn.set_active(name == tool_name)
 
@@ -349,6 +396,10 @@ class Toolbar(ctk.CTkFrame):
                 self.app_ref.main_window.properties_panel.hide()
         else:
             self.app_ref.set_tool(tool_name)
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
 
     def _zoom_in(self):
         vp = self.app_ref.main_window.viewport
@@ -373,10 +424,8 @@ class Toolbar(ctk.CTkFrame):
             self.app_ref.update_status()
 
     def _toggle_overview(self):
-        """Toggle document overview / all-pages view."""
         self.app_ref.toggle_overview()
 
-    # --- Page navigation ---
     def _prev_page(self):
         vp = self.app_ref.main_window.viewport
         vp.prev_page()
@@ -388,6 +437,7 @@ class Toolbar(ctk.CTkFrame):
         self.app_ref.update_status()
 
     # --- Page management ---
+
     def _insert_blank(self):
         from app.core.page_operations import insert_blank_page
         doc = self.app_ref.pdf_doc
@@ -400,16 +450,13 @@ class Toolbar(ctk.CTkFrame):
         self.app_ref.main_window.sidebar.refresh()
 
     def _extract_pages(self):
-        """Open the overview in extraction/multi-select mode."""
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
             return
         overview = self.app_ref.main_window.overview_panel
         overview.show(extract_mode=True)
 
-    # --- Page management methods ---
     def _new_document(self):
-        """Create a new blank PDF document."""
         import fitz
         from tkinter import filedialog
         path = filedialog.asksaveasfilename(
@@ -421,7 +468,7 @@ class Toolbar(ctk.CTkFrame):
             return
         try:
             doc = fitz.open()
-            doc.new_page(width=595, height=842)  # A4
+            doc.new_page(width=595, height=842)
             doc.save(path)
             doc.close()
             self.app_ref.open_file(path)
@@ -430,7 +477,6 @@ class Toolbar(ctk.CTkFrame):
             messagebox.showerror("Error", f"Failed to create new PDF:\n{e}")
 
     def _insert_pages_from_file(self):
-        """Insert pages from another PDF into the current document."""
         from tkinter import filedialog, messagebox
         from app.core.page_operations import insert_pages_from_file
         doc = self.app_ref.pdf_doc
@@ -448,15 +494,23 @@ class Toolbar(ctk.CTkFrame):
             doc.modified = True
             vp.load_document()
             self.app_ref.main_window.sidebar.refresh()
-            # Re-render overview if open
             overview = self.app_ref.main_window.overview_panel
             if overview.is_open:
                 overview._render_grid()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to insert pages:\n{e}")
 
+    def _export_as_image(self):
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            from tkinter import messagebox
+            messagebox.showinfo("Export", "No document open.")
+            return
+        from app.ui.dialogs.image_export_dialog import ImageExportDialog
+        dlg = ImageExportDialog(self.app_ref)
+        self.app_ref.wait_window(dlg)
+
     def _delete_pages_mode(self):
-        """Open overview in extract/delete mode for multi-select deletion."""
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
             return
@@ -464,7 +518,6 @@ class Toolbar(ctk.CTkFrame):
         overview.show(extract_mode=True)
 
     def _rotate_left(self):
-        """Rotate the current page 90° counter-clockwise."""
         from app.core.page_operations import rotate_page
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
@@ -476,7 +529,6 @@ class Toolbar(ctk.CTkFrame):
         self.app_ref.main_window.sidebar.refresh()
 
     def _rotate_right(self):
-        """Rotate the current page 90° clockwise."""
         from app.core.page_operations import rotate_page
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
@@ -488,7 +540,6 @@ class Toolbar(ctk.CTkFrame):
         self.app_ref.main_window.sidebar.refresh()
 
     def _apply_page_range(self):
-        """Parse the page range field and select those pages in overview."""
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
             return
@@ -503,7 +554,6 @@ class Toolbar(ctk.CTkFrame):
                                  f"Use format: 1,8,10-12\n"
                                  f"Pages must be between 1 and {doc.page_count}.")
             return
-        # Select those pages in the overview
         overview = self.app_ref.main_window.overview_panel
         if not overview.is_open:
             overview.show(extract_mode=True)
@@ -512,7 +562,6 @@ class Toolbar(ctk.CTkFrame):
 
     @staticmethod
     def _parse_range_text(text: str, total: int) -> list[int] | None:
-        """Parse '1,8,10-12' into 0-indexed page numbers."""
         pages = set()
         parts = text.replace(" ", "").split(",")
         for part in parts:
@@ -539,8 +588,8 @@ class Toolbar(ctk.CTkFrame):
         return sorted(pages) if pages else None
 
     # --- Compression ---
+
     def _compress_document(self):
-        """Compress the current PDF — downscale images + deflate."""
         from tkinter import messagebox
         from app.core.page_operations import compress_pdf
         doc = self.app_ref.pdf_doc
@@ -550,21 +599,17 @@ class Toolbar(ctk.CTkFrame):
         if not doc.file_path:
             messagebox.showinfo("Compress", "Save the document first before compressing.")
             return
-
         try:
             result = compress_pdf(doc.doc, doc.file_path, image_quality=75)
             orig_mb = result["original_bytes"] / (1024 * 1024)
             comp_mb = result["compressed_bytes"] / (1024 * 1024)
             saved = result["saved_pct"]
-
-            # Reload the compressed document
             path = doc.file_path
             doc.close()
             doc.open(path)
             self.app_ref.main_window.viewport.load_document()
             self.app_ref.main_window.sidebar.refresh()
             self.app_ref.update_status()
-
             messagebox.showinfo(
                 "Compressed",
                 f"Original: {orig_mb:.2f} MB\n"
@@ -572,17 +617,29 @@ class Toolbar(ctk.CTkFrame):
                 f"Saved: {saved}%"
             )
         except Exception as e:
+            log_exception(logger, "Compression failed", e)
             messagebox.showerror("Error", f"Compression failed:\n{e}")
 
+    # --- Watermark ---
+
+    def _add_watermark(self):
+        from tkinter import messagebox
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            messagebox.showinfo("Watermark", "No document open.")
+            return
+        from app.ui.dialogs.watermark_dialog import WatermarkDialog
+        dlg = WatermarkDialog(self.app_ref)
+        self.app_ref.wait_window(dlg)
+
     # --- Metadata strip ---
+
     def _strip_metadata(self):
-        """Remove all metadata from the current PDF (OPSEC)."""
         from tkinter import messagebox
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
             messagebox.showinfo("Strip Metadata", "No document open.")
             return
-
         confirm = messagebox.askyesno(
             "Strip Metadata",
             "This will permanently remove ALL metadata from this document:\n\n"
@@ -593,36 +650,72 @@ class Toolbar(ctk.CTkFrame):
             "Proceed?")
         if not confirm:
             return
-
         try:
+            logger.info("Stripping metadata from %s", doc.file_name)
             d = doc.doc
-            # Clear standard PDF metadata
             d.set_metadata({
-                "title": "",
-                "author": "",
-                "subject": "",
-                "keywords": "",
-                "creator": "",
-                "producer": "",
-                "creationDate": "",
-                "modDate": "",
+                "title": "", "author": "", "subject": "", "keywords": "",
+                "creator": "", "producer": "", "creationDate": "", "modDate": "",
             })
-            # Remove XMP metadata stream
             try:
                 d.del_xml_metadata()
             except Exception:
                 pass
-
             doc.modified = True
+            logger.info("Metadata stripped successfully from %s", doc.file_name)
             messagebox.showinfo("Metadata Stripped",
-                                "All metadata has been removed.\n"
-                                "Remember to save the file.")
+                                "All metadata has been removed.\nRemember to save the file.")
         except Exception as e:
+            log_exception(logger, "Failed to strip metadata", e)
             messagebox.showerror("Error", f"Failed to strip metadata:\n{e}")
 
+    # --- Form Filling ---
+
+    def _toggle_form_fill(self):
+        from tkinter import messagebox
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            messagebox.showinfo("Forms", "No document open.")
+            return
+        overlay = self.app_ref.main_window.viewport.form_overlay
+        if overlay._active:
+            overlay.deactivate()
+        else:
+            overlay.activate()
+            if not overlay._active:
+                messagebox.showinfo("Forms", "No form fields found in this document.")
+
+    def _save_form_fields(self):
+        from tkinter import messagebox
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            messagebox.showinfo("Forms", "No document open.")
+            return
+        overlay = self.app_ref.main_window.viewport.form_overlay
+        if not overlay._active:
+            messagebox.showinfo("Forms", "Form filling is not active.\nClick 'Fill Forms' first.")
+            return
+        count = overlay.save_values()
+        if count > 0:
+            messagebox.showinfo("Forms", f"Saved {count} field value(s).\nRemember to save the file.")
+        else:
+            messagebox.showinfo("Forms", "No field values changed.")
+
+    # --- Password Protection ---
+
+    def _protect_document(self):
+        from tkinter import messagebox
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            messagebox.showinfo("Protect", "No document open.")
+            return
+        from app.ui.dialogs.password_dialog import PasswordDialog
+        dlg = PasswordDialog(self.app_ref)
+        self.app_ref.wait_window(dlg)
+
     # --- Digital Signature ---
+
     def _sign_document(self):
-        """Open the digital signature dialog (CAC / certificate signing)."""
         from tkinter import messagebox
         doc = self.app_ref.pdf_doc
         if not doc or not doc.is_open:
@@ -632,14 +725,121 @@ class Toolbar(ctk.CTkFrame):
         dlg = SignDialog(self.app_ref, doc)
         self.app_ref.wait_window(dlg)
 
+    # --- Theme Toggle ---
+
+    def _toggle_theme(self):
+        """Cycle through dark → light → system → dark."""
+        current = self.app_ref.prefs.theme
+        cycle = {"dark": "light", "light": "system", "system": "dark"}
+        new_theme = cycle.get(current, "dark")
+        self.app_ref.set_theme(new_theme)
+
     # --- About ---
+
     def _show_about(self):
-        """Show About dialog with version and feature info."""
         from app.ui.about_dialog import AboutDialog
         dlg = AboutDialog(self.app_ref)
         self.app_ref.wait_window(dlg)
 
-    # --- Redaction actions ---
+    # --- Redaction ---
+
+    # --- OCR ---
+
+    def _run_ocr(self):
+        """OCR: if a document is open, OCR it. Otherwise, open an image file
+        and convert it to a searchable PDF via ocr_service."""
+        from tkinter import messagebox, filedialog
+        import threading
+
+        doc = self.app_ref.pdf_doc
+
+        # If a document is already open, use the OCR dialog on the PDF
+        if doc and doc.is_open:
+            from app.ui.dialogs.ocr_dialog import OCRDialog
+            dlg = OCRDialog(self.app_ref, doc)
+            self.app_ref.wait_window(dlg)
+            return
+
+        # No document open — prompt for an image file to OCR
+        try:
+            import ocrmypdf  # noqa: F401
+        except ImportError:
+            messagebox.showerror(
+                "OCR",
+                "OCRmyPDF is not installed.\n\n"
+                "Install with:\n  pip install ocrmypdf\n\n"
+                "Tesseract OCR must also be on your system.")
+            return
+
+        image_path = filedialog.askopenfilename(
+            title="Select image to OCR",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.gif"),
+                ("All files", "*.*"),
+            ])
+        if not image_path:
+            return
+
+        import os
+        from pathlib import Path
+        base_name = Path(image_path).stem
+        pdf_path = filedialog.asksaveasfilename(
+            title="Save searchable PDF as",
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            initialfile=f"{base_name}.pdf")
+        if not pdf_path:
+            return
+
+        # Run in background thread with indeterminate progress
+        import customtkinter as ctk
+        progress = ctk.CTkToplevel(self.app_ref)
+        progress.title("OCR Processing")
+        progress.geometry("340x100")
+        progress.resizable(False, False)
+        progress.transient(self.app_ref)
+        progress.grab_set()
+
+        ctk.CTkLabel(
+            progress, text=f"Running OCR on {Path(image_path).name}...",
+            font=ctk.CTkFont(family="Courier", size=11)
+        ).pack(padx=16, pady=(16, 8))
+        bar = ctk.CTkProgressBar(progress, width=280)
+        bar.pack(padx=16, pady=4)
+        bar.configure(mode="indeterminate")
+        bar.start()
+
+        def _convert():
+            try:
+                from app.core.ocr_service import ocr_image_to_pdf
+                ocr_image_to_pdf(image_path, pdf_path)
+                self.app_ref.after(0, lambda: _done(None))
+            except Exception as e:
+                self.app_ref.after(0, lambda err=str(e): _done(err))
+
+        def _done(error):
+            bar.stop()
+            progress.grab_release()
+            progress.destroy()
+            if error:
+                messagebox.showerror("OCR Error", f"OCR failed:\n\n{error}")
+            else:
+                self.app_ref.open_file(pdf_path)
+
+        threading.Thread(target=_convert, daemon=True).start()
+
+    # --- Find & Replace ---
+
+    def _find_replace(self):
+        from tkinter import messagebox
+        doc = self.app_ref.pdf_doc
+        if not doc or not doc.is_open:
+            messagebox.showinfo("Find & Replace", "No document open.")
+            return
+        from app.ui.dialogs.find_replace_dialog import FindReplaceDialog
+        dlg = FindReplaceDialog(self.app_ref, doc)
+        self.app_ref.wait_window(dlg)
+
     def _on_apply_redactions(self):
         self.app_ref.apply_redactions()
 

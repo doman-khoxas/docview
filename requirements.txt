@@ -1,6 +1,13 @@
 PyMuPDF>=1.23
 customtkinter>=5.2.0
 Pillow>=10.0
+tkhtmlview>=0.3.0
+markdown>=3.5
+ocrmypdf>=16.0
+
+# Optional — for drag-and-drop file opening (Windows)
+# pip install windnd
+# windnd>=1.0
 
 # Optional — for digital signature support (CAC / PFX signing)
 # pip install endesive cryptography

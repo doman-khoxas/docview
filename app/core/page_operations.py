@@ -3,9 +3,13 @@ import os
 import tempfile
 import fitz
 from pathlib import Path
+from app.logger import get_logger, log_exception
+
+logger = get_logger(__name__)
 
 
 def merge_pdfs(file_paths: list[str], output_path: str):
+    logger.info("Merging %d PDFs into %s", len(file_paths), output_path)
     result = fitz.open()
     for path in file_paths:
         doc = fitz.open(path)
@@ -13,9 +17,11 @@ def merge_pdfs(file_paths: list[str], output_path: str):
         doc.close()
     result.save(output_path)
     result.close()
+    logger.info("Merge complete: %s", output_path)
 
 
 def split_pdf(doc: fitz.Document, page_ranges: list[tuple[int, int]], output_dir: str, base_name: str):
+    logger.info("Splitting PDF into %d parts -> %s", len(page_ranges), output_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     created_files = []
@@ -26,15 +32,18 @@ def split_pdf(doc: fitz.Document, page_ranges: list[tuple[int, int]], output_dir
         new_doc.save(str(out_path))
         new_doc.close()
         created_files.append(str(out_path))
+    logger.info("Split complete: %d files created", len(created_files))
     return created_files
 
 
 def rotate_page(doc: fitz.Document, page_num: int, angle: int = 90):
     page = doc[page_num]
     page.set_rotation((page.rotation + angle) % 360)
+    logger.info("Rotated page %d by %d degrees", page_num + 1, angle)
 
 
 def delete_pages(doc: fitz.Document, page_nums: list[int]):
+    logger.info("Deleting %d page(s): %s", len(page_nums), [n + 1 for n in page_nums])
     for num in sorted(page_nums, reverse=True):
         doc.delete_page(num)
 
@@ -109,7 +118,8 @@ def compress_pdf(doc: fitz.Document, file_path: str,
                 # Only replace if actually smaller
                 if len(new_bytes) < len(img_bytes):
                     page.replace_image(xref, stream=new_bytes)
-            except Exception:
+            except Exception as e:
+                logger.debug("Skipping image xref=%d during compression: %s", xref, e)
                 continue  # Skip problematic images
 
     # --- Save with maximum compression ---
@@ -129,6 +139,7 @@ def compress_pdf(doc: fitz.Document, file_path: str,
             os.unlink(tmp_path)
 
     saved_pct = round((1 - (new_size / original_size)) * 100, 1) if original_size > 0 else 0.0
+    logger.info("Compression: %d -> %d bytes (%.1f%% saved)", original_size, new_size, saved_pct)
     return {
         "original_bytes": original_size,
         "compressed_bytes": new_size,

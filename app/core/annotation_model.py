@@ -1,6 +1,9 @@
 """Dataclasses for each annotation type and commit logic."""
 from dataclasses import dataclass, field
 import fitz
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -47,6 +50,29 @@ class HighlightAnnotation(AnnotationBase):
 
 
 @dataclass
+class UnderlineAnnotation(AnnotationBase):
+    color: str = "#ED4245"
+    opacity: float = 0.8
+    quads: list = field(default_factory=list)
+
+
+@dataclass
+class StrikeoutAnnotation(AnnotationBase):
+    color: str = "#ED4245"
+    opacity: float = 0.8
+    quads: list = field(default_factory=list)
+
+
+@dataclass
+class ArrowAnnotation(AnnotationBase):
+    x0: float = 0
+    y0: float = 0
+    x1: float = 0
+    y1: float = 0
+    border_width: float = 2
+
+
+@dataclass
 class FreetextAnnotation(AnnotationBase):
     x: float = 0
     y: float = 0
@@ -73,6 +99,27 @@ class ImageAnnotation(AnnotationBase):
 
 
 @dataclass
+class StickyNoteAnnotation(AnnotationBase):
+    """Small icon annotation that shows popup text."""
+    x: float = 0
+    y: float = 0
+    text: str = ""
+    icon: str = "Note"  # Note, Comment, Help, Insert, Key, Paragraph
+    color: str = "#FAA61A"
+
+
+@dataclass
+class StampAnnotation(AnnotationBase):
+    """Stamp annotation (Approved, Confidential, Draft, etc.)."""
+    x0: float = 0
+    y0: float = 0
+    x1: float = 0
+    y1: float = 0
+    stamp_text: str = "APPROVED"
+    color: str = "#ED4245"
+
+
+@dataclass
 class RedactAnnotation(AnnotationBase):
     """Pending redaction rectangle — applied permanently via page.apply_redactions()."""
     x0: float = 0
@@ -88,6 +135,7 @@ def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
 
 
 def commit_to_pdf(page: fitz.Page, annotation):
+    logger.debug("Committing %s to page %d", type(annotation).__name__, annotation.page_num + 1)
     if isinstance(annotation, RectAnnotation):
         rect = fitz.Rect(annotation.x0, annotation.y0, annotation.x1, annotation.y1)
         annot = page.add_rect_annot(rect)
@@ -124,6 +172,30 @@ def commit_to_pdf(page: fitz.Page, annotation):
             annot.set_opacity(annotation.opacity)
             annot.update()
 
+    elif isinstance(annotation, UnderlineAnnotation):
+        if annotation.quads:
+            annot = page.add_underline_annot(quads=annotation.quads)
+            annot.set_colors(stroke=_hex_to_rgb(annotation.color))
+            annot.set_opacity(annotation.opacity)
+            annot.update()
+
+    elif isinstance(annotation, StrikeoutAnnotation):
+        if annotation.quads:
+            annot = page.add_strikeout_annot(quads=annotation.quads)
+            annot.set_colors(stroke=_hex_to_rgb(annotation.color))
+            annot.set_opacity(annotation.opacity)
+            annot.update()
+
+    elif isinstance(annotation, ArrowAnnotation):
+        p1 = fitz.Point(annotation.x0, annotation.y0)
+        p2 = fitz.Point(annotation.x1, annotation.y1)
+        annot = page.add_line_annot(p1, p2)
+        annot.set_border(width=annotation.border_width)
+        annot.set_colors(stroke=_hex_to_rgb(annotation.color))
+        annot.set_opacity(annotation.opacity)
+        annot.set_line_ends(fitz.PDF_ANNOT_LE_NONE, fitz.PDF_ANNOT_LE_CLOSED_ARROW)
+        annot.update()
+
     elif isinstance(annotation, FreetextAnnotation):
         rect = fitz.Rect(annotation.x, annotation.y,
                          annotation.x + 200, annotation.y + annotation.font_size + 10)
@@ -149,6 +221,21 @@ def commit_to_pdf(page: fitz.Page, annotation):
         if annotation.image_path:
             rect = fitz.Rect(annotation.x0, annotation.y0, annotation.x1, annotation.y1)
             page.insert_image(rect, filename=annotation.image_path)
+
+    elif isinstance(annotation, StickyNoteAnnotation):
+        point = fitz.Point(annotation.x, annotation.y)
+        annot = page.add_text_annot(point, annotation.text, icon=annotation.icon)
+        annot.set_colors(stroke=_hex_to_rgb(annotation.color))
+        annot.set_opacity(annotation.opacity)
+        annot.update()
+
+    elif isinstance(annotation, StampAnnotation):
+        rect = fitz.Rect(annotation.x0, annotation.y0, annotation.x1, annotation.y1)
+        annot = page.add_stamp_annot(rect, stamp=0)
+        annot.set_info(content=annotation.stamp_text)
+        annot.set_colors(stroke=_hex_to_rgb(annotation.color))
+        annot.set_opacity(annotation.opacity)
+        annot.update()
 
     elif isinstance(annotation, RedactAnnotation):
         # Redactions are handled separately via page.apply_redactions().

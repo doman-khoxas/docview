@@ -1,6 +1,7 @@
 """Continuous vertical-scroll viewport — all pages stacked with gaps/shadows, lazy render."""
 import tkinter as tk
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from PIL import ImageTk
 from app.config import (
     ZOOM_DEFAULT, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, CANVAS_BG,
@@ -8,6 +9,11 @@ from app.config import (
     OVERSCAN_PX, PAGE_CACHE_SIZE, RENDER_DPI,
 )
 from app.core.pdf_renderer import render_page, get_render_scale, pdf_to_canvas_coords
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
+_RENDER_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pdf_render")
 
 
 class _PageCanvasProxy:
@@ -108,6 +114,11 @@ class ContinuousViewport(tk.Frame):
         self._pending_configure = None  # debounce handle for configure events
         self._pending_zoom = None       # debounce handle for zoom operations
         self._last_canvas_w = 0         # track width to skip no-op configures
+        self._render_futures: dict[int, object] = {}  # page_num -> Future
+        self._tool_press_offset = None  # (x_off, y_off) locked at press time
+
+        from app.ui.form_overlay import FormOverlay
+        self.form_overlay = FormOverlay(self)
 
     # ------------------------------------------------------------------
     # public API (called by tools, toolbar, app)
@@ -119,12 +130,16 @@ class ContinuousViewport(tk.Frame):
 
     def load_document(self):
         """Call after opening / switching a document."""
+        self._cancel_pending_renders()
         self._page_cache.clear()
         self._drawn_pages.clear()
         self._photo_refs.clear()
         self._compute_layout()
         self.canvas.delete("all")
         self._render_visible_pages()
+        doc = self._get_doc()
+        if doc and doc.is_open:
+            logger.debug("Viewport loaded: %d pages, zoom=%.2f", doc.page_count, self.zoom)
 
     def render_current_page(self):
         """Compatibility shim: tools call this after annotation changes."""
@@ -168,9 +183,16 @@ class ContinuousViewport(tk.Frame):
                 self.after_cancel(self._pending_zoom)
             self._pending_zoom = self.after(100, self._apply_zoom)
 
+    def _cancel_pending_renders(self):
+        """Cancel any in-flight render futures."""
+        for fut in self._render_futures.values():
+            fut.cancel()
+        self._render_futures.clear()
+
     def _apply_zoom(self):
         """Deferred zoom execution — runs once after rapid scroll stops."""
         self._pending_zoom = None
+        self._cancel_pending_renders()
         self._page_cache.clear()
         self._drawn_pages.clear()
         self._photo_refs.clear()
@@ -303,23 +325,65 @@ class ContinuousViewport(tk.Frame):
         if page_num in self._page_cache:
             self._page_cache.move_to_end(page_num)
             pil_img = self._page_cache[page_num]
+            self._finish_draw_page(page_num, pil_img, x_off, y_off)
+        elif page_num in self._render_futures:
+            # already submitted for rendering — show placeholder
+            self._draw_placeholder(page_num, x_off, y_off, pw, ph)
         else:
+            # submit to thread pool for async rendering
+            self._draw_placeholder(page_num, x_off, y_off, pw, ph)
+            self._drawn_pages.add(page_num)
             page = doc.get_page(page_num)
-            pil_img = render_page(page, self.zoom)
-            self._page_cache[page_num] = pil_img
-            # evict oldest if over limit, but never evict drawn pages
-            while len(self._page_cache) > PAGE_CACHE_SIZE:
-                # find first evictable (not currently drawn on canvas)
-                evicted_pn = None
-                for pn_key in self._page_cache:
-                    if pn_key not in self._drawn_pages:
-                        evicted_pn = pn_key
-                        break
-                if evicted_pn is None:
-                    break  # all cached pages are drawn; can't evict
-                del self._page_cache[evicted_pn]
-                self._photo_refs.pop(evicted_pn, None)
+            zoom = self.zoom
+            future = _RENDER_POOL.submit(render_page, page, zoom)
+            self._render_futures[page_num] = future
+            future.add_done_callback(
+                lambda f, pn=page_num: self._on_render_done(pn, f))
+            return
 
+        self._drawn_pages.add(page_num)
+
+    def _draw_placeholder(self, page_num: int, x_off, y_off, pw, ph):
+        """Draw a light placeholder rectangle while the page renders."""
+        self.canvas.create_rectangle(
+            x_off, y_off, x_off + pw, y_off + ph,
+            fill="#232428", outline="#333", tags=f"page_{page_num}")
+
+    def _on_render_done(self, page_num: int, future):
+        """Called from thread pool when rendering completes. Schedules UI update."""
+        self._render_futures.pop(page_num, None)
+        try:
+            pil_img = future.result()
+        except Exception:
+            return
+        # Cache the result
+        self._page_cache[page_num] = pil_img
+        self._evict_cache()
+        # Schedule canvas update on main thread
+        try:
+            self.after_idle(self._apply_rendered_page, page_num)
+        except Exception:
+            pass  # widget destroyed
+
+    def _apply_rendered_page(self, page_num: int):
+        """Apply a rendered page image to the canvas (main thread)."""
+        if page_num not in self._page_cache:
+            return
+        if not self._page_layout or page_num >= len(self._page_layout):
+            return
+        pil_img = self._page_cache[page_num]
+        y_off, pw, ph = self._page_layout[page_num]
+        canvas_w = self.canvas.winfo_width()
+        x_off = (canvas_w - pw) / 2
+
+        # Remove old placeholder / stale items
+        self.canvas.delete(f"page_{page_num}")
+        self.canvas.delete(f"annot_{page_num}")
+
+        self._finish_draw_page(page_num, pil_img, x_off, y_off)
+
+    def _finish_draw_page(self, page_num, pil_img, x_off, y_off):
+        """Common path: put the rendered image on canvas and draw annotations."""
         photo = ImageTk.PhotoImage(pil_img)
         self._photo_refs[page_num] = photo
 
@@ -329,13 +393,26 @@ class ContinuousViewport(tk.Frame):
         # draw pending annotations for this page
         self._draw_page_annotations(page_num, x_off, y_off)
 
-        self._drawn_pages.add(page_num)
+    def _evict_cache(self):
+        """Evict oldest cache entries, but never evict currently drawn pages."""
+        while len(self._page_cache) > PAGE_CACHE_SIZE:
+            evicted_pn = None
+            for pn_key in self._page_cache:
+                if pn_key not in self._drawn_pages:
+                    evicted_pn = pn_key
+                    break
+            if evicted_pn is None:
+                break
+            del self._page_cache[evicted_pn]
+            self._photo_refs.pop(evicted_pn, None)
 
     def _draw_page_annotations(self, page_num: int, x_off: float, y_off: float):
         from app.core.annotation_model import (
-            RectAnnotation, CircleAnnotation, LineAnnotation,
-            HighlightAnnotation, FreetextAnnotation, InkAnnotation,
+            RectAnnotation, CircleAnnotation, LineAnnotation, ArrowAnnotation,
+            HighlightAnnotation, UnderlineAnnotation, StrikeoutAnnotation,
+            FreetextAnnotation, InkAnnotation,
             RedactAnnotation, ImageAnnotation,
+            StickyNoteAnnotation, StampAnnotation,
         )
         doc = self._get_doc()
         if not doc:
@@ -373,6 +450,32 @@ class ContinuousViewport(tk.Frame):
                     self.canvas.create_polygon(
                         pts, fill=annot.color, outline="",
                         stipple="gray50", tags=tag)
+            elif isinstance(annot, UnderlineAnnotation):
+                for quad in annot.quads:
+                    # Draw line along bottom edge of each quad
+                    self.canvas.create_line(
+                        x_off + quad.ll.x * scale, y_off + quad.ll.y * scale,
+                        x_off + quad.lr.x * scale, y_off + quad.lr.y * scale,
+                        fill=annot.color, width=max(1, int(2 * self.zoom)),
+                        tags=tag)
+            elif isinstance(annot, StrikeoutAnnotation):
+                for quad in annot.quads:
+                    # Draw line through middle of each quad
+                    mid_y = (quad.ul.y + quad.ll.y) / 2
+                    self.canvas.create_line(
+                        x_off + quad.ul.x * scale, y_off + mid_y * scale,
+                        x_off + quad.ur.x * scale, y_off + mid_y * scale,
+                        fill=annot.color, width=max(1, int(2 * self.zoom)),
+                        tags=tag)
+            elif isinstance(annot, ArrowAnnotation):
+                ax0 = x_off + annot.x0 * scale
+                ay0 = y_off + annot.y0 * scale
+                ax1 = x_off + annot.x1 * scale
+                ay1 = y_off + annot.y1 * scale
+                self.canvas.create_line(
+                    ax0, ay0, ax1, ay1,
+                    fill=annot.color, width=annot.border_width,
+                    arrow="last", arrowshape=(12, 15, 5), tags=tag)
             elif isinstance(annot, FreetextAnnotation):
                 self.canvas.create_text(
                     x_off + annot.x * scale, y_off + annot.y * scale,
@@ -394,6 +497,31 @@ class ContinuousViewport(tk.Frame):
                     x_off + annot.x1 * scale, y_off + annot.y1 * scale,
                     fill="#ED4245", outline="#ED4245", width=2,
                     stipple="gray50", tags=tag)
+            elif isinstance(annot, StickyNoteAnnotation):
+                # Small icon + tooltip-style preview
+                nx = x_off + annot.x * scale
+                ny = y_off + annot.y * scale
+                size = max(16, int(20 * self.zoom))
+                self.canvas.create_rectangle(
+                    nx, ny, nx + size, ny + size,
+                    fill=annot.color, outline=annot.color, tags=tag)
+                self.canvas.create_text(
+                    nx + size / 2, ny + size / 2, text="\u2709",
+                    fill="#FFFFFF", font=("Segoe UI", max(8, int(10 * self.zoom))),
+                    tags=tag)
+            elif isinstance(annot, StampAnnotation):
+                sx0 = x_off + annot.x0 * scale
+                sy0 = y_off + annot.y0 * scale
+                sx1 = x_off + annot.x1 * scale
+                sy1 = y_off + annot.y1 * scale
+                self.canvas.create_rectangle(
+                    sx0, sy0, sx1, sy1,
+                    outline=annot.color, width=3, dash=(8, 4), tags=tag)
+                self.canvas.create_text(
+                    (sx0 + sx1) / 2, (sy0 + sy1) / 2,
+                    text=annot.stamp_text, fill=annot.color,
+                    font=("Segoe UI", max(10, int(16 * self.zoom)), "bold"),
+                    tags=tag)
             elif isinstance(annot, ImageAnnotation):
                 # Show image preview or placeholder
                 ix0 = x_off + annot.x0 * scale
@@ -431,6 +559,8 @@ class ContinuousViewport(tk.Frame):
     def _on_yscroll(self, *args):
         self.v_scroll.set(*args)
         self._schedule_render()
+        if self.form_overlay._active:
+            self.form_overlay.update_positions()
 
     def _schedule_render(self):
         if not self._pending_render:
@@ -502,14 +632,18 @@ class ContinuousViewport(tk.Frame):
         if tool is None or isinstance(tool, HandTool):
             self.canvas.scan_mark(event.x, event.y)
             self.canvas.configure(cursor="fleur")
+            self._tool_press_offset = None
             return
 
         if page_num is None:
+            self._tool_press_offset = None
             return
 
-        # set proxy offset so tool temp-drawing lands at correct canvas position
+        # Lock the page offset for the entire press→drag→release cycle.
+        # This prevents drift if the canvas resizes or layout shifts mid-draw.
         x_off = self._page_x_offset(page_num)
         y_off = self._page_layout[page_num][0]
+        self._tool_press_offset = (x_off, y_off)
         self._proxy.set_page_offset(x_off, y_off)
 
         # pass page-relative canvas coords to tool
@@ -526,9 +660,10 @@ class ContinuousViewport(tk.Frame):
             self._schedule_render()
             return
 
-        if tool and self.current_page < len(self._page_layout):
-            x_off = self._page_x_offset(self.current_page)
-            y_off = self._page_layout[self.current_page][0]
+        if tool and self._tool_press_offset:
+            # Reuse the offset locked at press time — keeps coords consistent
+            x_off, y_off = self._tool_press_offset
+            self._proxy.set_page_offset(x_off, y_off)
             tool.on_drag(cx - x_off, cy - y_off)
 
     def _on_release(self, event):
@@ -541,10 +676,13 @@ class ContinuousViewport(tk.Frame):
             self.canvas.configure(cursor="hand2")
             return
 
-        if tool and self.current_page < len(self._page_layout):
-            x_off = self._page_x_offset(self.current_page)
-            y_off = self._page_layout[self.current_page][0]
+        if tool and self._tool_press_offset:
+            # Use the same offset from press — guarantees annotation lands
+            # exactly where the user drew it, regardless of scroll/resize
+            x_off, y_off = self._tool_press_offset
+            self._proxy.set_page_offset(x_off, y_off)
             tool.on_release(cx - x_off, cy - y_off)
+            self._tool_press_offset = None
 
     def _on_right_click(self, event):
         if hasattr(self.app_ref, 'main_window'):
@@ -553,8 +691,10 @@ class ContinuousViewport(tk.Frame):
                 mw.context_menu.show(event.x_root, event.y_root)
 
     def _on_double_click(self, event):
-        """Double-click to edit existing FreetextAnnotation."""
+        """Double-click to edit existing FreetextAnnotation or native PDF text."""
         from app.core.annotation_model import FreetextAnnotation
+        import fitz
+
         cx = self.canvas.canvasx(event.x)
         cy = self.canvas.canvasy(event.y)
 
@@ -570,15 +710,15 @@ class ContinuousViewport(tk.Frame):
         y_off = self._page_layout[page_num][0]
         scale = get_render_scale(self.zoom)
 
-        # find FreetextAnnotation under cursor
+        # PDF coordinates of click
         px = (cx - x_off) / scale
         py = (cy - y_off) / scale
 
+        # First: check pending FreetextAnnotations
         annotations = doc.get_pending_annotations(page_num)
         for annot in reversed(annotations):
             if isinstance(annot, FreetextAnnotation):
                 if abs(px - annot.x) < 30 and abs(py - annot.y) < 20:
-                    # open edit dialog
                     from app.ui.dialogs.text_input_dialog import TextInputDialog
                     dialog = TextInputDialog(self.app_ref)
                     dialog._entry.insert(0, annot.text)
@@ -591,11 +731,77 @@ class ContinuousViewport(tk.Frame):
                         self.render_current_page()
                     return "break"
 
+        # Second: check native PDF text under cursor
+        try:
+            page = doc.get_page(page_num)
+            click_point = fitz.Point(px, py)
+            text_dict = page.get_text("dict")
+
+            for block in text_dict.get("blocks", []):
+                if block.get("type") != 0:  # text blocks only
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        bbox = fitz.Rect(span["bbox"])
+                        if bbox.contains(click_point):
+                            self._edit_native_text(
+                                page_num, page, span, bbox)
+                            return "break"
+        except Exception as e:
+            logger.debug("Native text edit check failed: %s", e)
+
     def _page_at(self, cy: float) -> int | None:
         for pn, (y_off, pw, ph) in enumerate(self._page_layout):
             if y_off <= cy <= y_off + ph:
                 return pn
         return None
+
+    def _edit_native_text(self, page_num: int, page, span: dict, bbox):
+        """Edit a native PDF text span via redact-and-replace."""
+        import fitz
+        from app.ui.dialogs.text_input_dialog import TextInputDialog
+
+        old_text = span.get("text", "")
+        if not old_text.strip():
+            return
+
+        dialog = TextInputDialog(self.app_ref)
+        dialog._entry.insert(0, old_text)
+        dialog._entry.select_range(0, "end")
+        dialog.title("Edit Text")
+        self.app_ref.wait_window(dialog)
+
+        new_text = dialog.result
+        if not new_text or new_text == old_text:
+            return
+
+        try:
+            # Get original formatting
+            fontsize = span.get("size", 11)
+            color_int = span.get("color", 0)
+            if isinstance(color_int, int):
+                r = ((color_int >> 16) & 0xFF) / 255.0
+                g = ((color_int >> 8) & 0xFF) / 255.0
+                b = (color_int & 0xFF) / 255.0
+                text_color = (r, g, b)
+            else:
+                text_color = (0, 0, 0)
+
+            # Redact old text and insert new text
+            page.add_redact_annot(
+                bbox, text=new_text,
+                fontsize=fontsize, fontname="helv",
+                text_color=text_color, fill=(1, 1, 1))
+            page.apply_redactions()
+
+            doc = self._get_doc()
+            doc.modified = True
+            self.render_current_page()
+        except Exception as e:
+            logger.error("Failed to edit native text: %s", e)
+            from tkinter import messagebox
+            messagebox.showerror("Edit Error",
+                                 f"Failed to edit text:\n{e}")
 
     # ------------------------------------------------------------------
     # search highlighting

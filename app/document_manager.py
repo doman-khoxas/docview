@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from app.core.pdf_document import PDFDocument
 from app.config import ZOOM_DEFAULT
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -51,6 +54,7 @@ class DocumentManager:
         resolved = str(Path(file_path).resolve())
         for i, tab in enumerate(self._tabs):
             if tab.file_path and str(Path(tab.file_path).resolve()) == resolved:
+                logger.debug("Document already open in tab %d, switching", i)
                 self._active_index = i
                 return i
 
@@ -59,6 +63,7 @@ class DocumentManager:
         tab = TabState(pdf_doc=doc, file_path=file_path)
         self._tabs.append(tab)
         self._active_index = len(self._tabs) - 1
+        logger.info("Opened document in tab %d: %s", self._active_index, Path(file_path).name)
         return self._active_index
 
     def close_tab(self, index: int) -> bool:
@@ -67,6 +72,7 @@ class DocumentManager:
             return len(self._tabs) > 0
 
         tab = self._tabs[index]
+        logger.info("Closing tab %d: %s", index, tab.pdf_doc.file_name)
         tab.pdf_doc.close()
         self._tabs.pop(index)
 

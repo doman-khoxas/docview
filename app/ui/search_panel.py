@@ -1,68 +1,113 @@
-"""DocView search bar — Ctrl+F with prev/next result navigation."""
+"""DocView search bar — Cyber-Brutalist terminal-style search row.
+
+Strict theme compliance: BG_ABYSS, BORDER_RED, TEXT_RED, HOVER_RED.
+All corner_radius=0. All text in Courier. Thick borders. Harsh aesthetic.
+"""
 import customtkinter as ctk
 from app.config import (
-    BG_SURFACE, BG_ABYSS, BORDER_SUBTLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    ACCENT, ACCENT_MUTED, BG_HOVER, BG_ACTIVE, CORNER_RADIUS
+    BG_ABYSS, BG_PANEL, BORDER_RED, TEXT_RED,
+    HOVER_RED, ACTIVE_RED, COLOR_DANGER, TEXT_MUTED
 )
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
+_FONT = ctk.CTkFont(family="Courier", size=12)
+_FONT_SM = ctk.CTkFont(family="Courier", size=11)
+_FONT_BTN = ctk.CTkFont(family="Courier", size=11, weight="bold")
 
 
 class SearchPanel(ctk.CTkFrame):
+    """Harsh terminal-style search bar. Zero radius. Thick borders. Courier."""
+
     def __init__(self, parent, app_ref):
-        super().__init__(parent, height=36, fg_color=BG_SURFACE,
-                         border_color=BORDER_SUBTLE, border_width=1,
-                         corner_radius=CORNER_RADIUS)
+        super().__init__(
+            parent, height=38, fg_color=BG_PANEL,
+            border_color=BORDER_RED, border_width=2,
+            corner_radius=0
+        )
         self.app_ref = app_ref
         self.pack_propagate(False)
-        self._results: list[tuple[int, list]] = []  # [(page_num, [Rect,...]), ...]
+        self._results: list[tuple[int, list]] = []
         self._current_idx = -1
-        self._flat_results: list[tuple[int, int]] = []  # [(page_num, rect_idx), ...]
+        self._flat_results: list[tuple[int, int]] = []
 
+        # --- FIND> prompt label ---
+        ctk.CTkLabel(
+            self, text="FIND>",
+            font=_FONT_BTN, text_color=COLOR_DANGER
+        ).pack(side="left", padx=(6, 2))
+
+        # --- Search entry ---
         self._entry_var = ctk.StringVar()
-        self._entry = ctk.CTkEntry(self, textvariable=self._entry_var,
-                                   width=250, height=28, placeholder_text="Search...",
-                                   fg_color=BG_ABYSS, border_color=BORDER_SUBTLE,
-                                   text_color=TEXT_PRIMARY,
-                                   font=ctk.CTkFont(family="Segoe UI", size=12))
-        self._entry.pack(side="left", padx=(8, 4), pady=4)
+        self._entry = ctk.CTkEntry(
+            self, textvariable=self._entry_var,
+            width=240, height=28,
+            placeholder_text="search term...",
+            fg_color=BG_ABYSS,
+            border_color=BORDER_RED, border_width=2,
+            text_color=TEXT_RED,
+            placeholder_text_color=TEXT_MUTED,
+            font=_FONT,
+            corner_radius=0
+        )
+        self._entry.pack(side="left", padx=(2, 4), pady=4)
         self._entry.bind("<Return>", lambda e: self._do_search())
 
-        search_btn = ctk.CTkButton(self, text="Find", width=50, height=26,
-                                   fg_color=ACCENT_MUTED, hover_color=ACCENT,
-                                   text_color=TEXT_PRIMARY,
-                                   font=ctk.CTkFont(family="Segoe UI", size=11),
-                                   corner_radius=4,
-                                   command=self._do_search)
-        search_btn.pack(side="left", padx=2)
+        # --- EXEC button ---
+        ctk.CTkButton(
+            self, text="EXEC", width=50, height=26,
+            fg_color=BG_ABYSS, hover_color=HOVER_RED,
+            border_color=BORDER_RED, border_width=2,
+            text_color=TEXT_RED, font=_FONT_BTN,
+            corner_radius=0, command=self._do_search
+        ).pack(side="left", padx=2)
 
-        prev_btn = ctk.CTkButton(self, text="<", width=28, height=26,
-                                 fg_color="transparent", hover_color=BG_ACTIVE,
-                                 text_color=TEXT_SECONDARY,
-                                 font=ctk.CTkFont(family="Segoe UI", size=11),
-                                 corner_radius=4,
-                                 command=self._prev_result)
-        prev_btn.pack(side="left", padx=1)
+        # --- Case toggle ---
+        self._case_var = ctk.BooleanVar(value=False)
+        self._case_cb = ctk.CTkCheckBox(
+            self, text="Aa", variable=self._case_var,
+            width=36, height=26,
+            font=_FONT_SM, text_color=TEXT_RED,
+            fg_color=COLOR_DANGER, hover_color=HOVER_RED,
+            border_color=BORDER_RED, border_width=2,
+            corner_radius=0, checkbox_width=16, checkbox_height=16,
+            command=self._do_search
+        )
+        self._case_cb.pack(side="left", padx=4)
 
-        next_btn = ctk.CTkButton(self, text=">", width=28, height=26,
-                                 fg_color="transparent", hover_color=BG_ACTIVE,
-                                 text_color=TEXT_SECONDARY,
-                                 font=ctk.CTkFont(family="Segoe UI", size=11),
-                                 corner_radius=4,
-                                 command=self._next_result)
-        next_btn.pack(side="left", padx=1)
+        # --- Nav buttons ---
+        ctk.CTkButton(
+            self, text="<", width=26, height=26,
+            fg_color=BG_ABYSS, hover_color=HOVER_RED,
+            border_color=BORDER_RED, border_width=2,
+            text_color=TEXT_RED, font=_FONT_BTN,
+            corner_radius=0, command=self._prev_result
+        ).pack(side="left", padx=1)
 
-        self._count_label = ctk.CTkLabel(self, text="",
-                                         font=ctk.CTkFont(family="Segoe UI", size=11),
-                                         text_color=TEXT_MUTED)
+        ctk.CTkButton(
+            self, text=">", width=26, height=26,
+            fg_color=BG_ABYSS, hover_color=HOVER_RED,
+            border_color=BORDER_RED, border_width=2,
+            text_color=TEXT_RED, font=_FONT_BTN,
+            corner_radius=0, command=self._next_result
+        ).pack(side="left", padx=1)
+
+        # --- Result count ---
+        self._count_label = ctk.CTkLabel(
+            self, text="",
+            font=_FONT_SM, text_color=TEXT_MUTED
+        )
         self._count_label.pack(side="left", padx=8)
 
-        close_btn = ctk.CTkButton(self, text="x", width=26, height=26,
-                                  fg_color="transparent",
-                                  hover_color=BG_ACTIVE,
-                                  text_color=TEXT_SECONDARY,
-                                  font=ctk.CTkFont(family="Segoe UI", size=11),
-                                  corner_radius=4,
-                                  command=self.close)
-        close_btn.pack(side="right", padx=4)
+        # --- Close [X] ---
+        ctk.CTkButton(
+            self, text="X", width=26, height=26,
+            fg_color=BG_ABYSS, hover_color=COLOR_DANGER,
+            border_color=BORDER_RED, border_width=2,
+            text_color=COLOR_DANGER, font=_FONT_BTN,
+            corner_radius=0, command=self.close
+        ).pack(side="right", padx=4)
 
     def open(self):
         self.pack(fill="x", side="top")
@@ -94,9 +139,18 @@ class SearchPanel(ctk.CTkFrame):
         self._results.clear()
         self._flat_results.clear()
 
+        match_case = self._case_var.get()
+
         for pn in range(doc.page_count):
             page = doc.get_page(pn)
             rects = page.search_for(query)
+            if match_case and rects:
+                filtered = []
+                for r in rects:
+                    text = page.get_textbox(r)
+                    if query in text:
+                        filtered.append(r)
+                rects = filtered
             if rects:
                 self._results.append((pn, rects))
                 for ri in range(len(rects)):
@@ -106,12 +160,14 @@ class SearchPanel(ctk.CTkFrame):
         vp.highlight_search_results(self._results)
 
         total = len(self._flat_results)
+        logger.info("Search '%s': %d hit(s) / %d page(s)",
+                     query, total, len(self._results))
         if total > 0:
             self._current_idx = 0
             self._navigate_to_current()
         else:
             self._current_idx = -1
-            self._count_label.configure(text="No results")
+            self._count_label.configure(text="0 HITS")
 
     def _navigate_to_current(self):
         if not self._flat_results or self._current_idx < 0:
@@ -119,7 +175,8 @@ class SearchPanel(ctk.CTkFrame):
         total = len(self._flat_results)
         page_num, _ = self._flat_results[self._current_idx]
         self.app_ref.main_window.viewport.go_to_page(page_num)
-        self._count_label.configure(text=f"{self._current_idx + 1} / {total}")
+        self._count_label.configure(
+            text=f"{self._current_idx + 1}/{total}")
 
     def _next_result(self):
         if not self._flat_results:

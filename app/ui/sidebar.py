@@ -10,6 +10,9 @@ from app.config import (
     ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, BG_SURFACE, BG_ACTIVE, ACCENT_MUTED, BORDER_SUBTLE
 )
 from app.core.pdf_renderer import render_thumbnail
+from app.logger import get_logger, log_exception
+
+logger = get_logger(__name__)
 
 
 class Sidebar(ctk.CTkFrame):
@@ -184,7 +187,9 @@ class Sidebar(ctk.CTkFrame):
 
         try:
             toc = doc.doc.get_toc()
-        except Exception:
+            logger.debug("TOC loaded: %d entries", len(toc))
+        except Exception as e:
+            logger.warning("Failed to load TOC: %s", e)
             toc = []
 
         if not toc:
@@ -244,8 +249,10 @@ class Sidebar(ctk.CTkFrame):
                 new_doc.insert_pdf(doc.doc, from_page=page_num, to_page=page_num)
                 new_doc.save(path)
                 new_doc.close()
+                logger.info("Extracted page %d to %s", page_num + 1, path)
                 messagebox.showinfo("Extracted", f"Page {page_num + 1} saved to:\n{path}")
             except Exception as e:
+                log_exception(logger, "Failed to extract page", e)
                 messagebox.showerror("Error", f"Failed to extract page:\n{e}")
 
     def _extract_page_range(self):

@@ -2,21 +2,26 @@
 import os
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
-from app.config import WINDOW_TITLE, WINDOW_SIZE, APPEARANCE_MODE, COLOR_THEME
+from app.config import WINDOW_TITLE, WINDOW_SIZE, COLOR_THEME
 from app.document_manager import DocumentManager
 from app.recent_files import RecentFiles
+from app.preferences import Preferences
 from app.core.pdf_document import PDFDocument
 from app.ui.main_window import MainWindow
+from app.logger import get_logger, log_exception
+
+logger = get_logger(__name__)
 
 
 class DocViewApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        ctk.set_appearance_mode(APPEARANCE_MODE)
+        self.prefs = Preferences()
+        ctk.set_appearance_mode(self.prefs.theme)
         ctk.set_default_color_theme(COLOR_THEME)
 
         self.title(WINDOW_TITLE)
-        self.geometry(WINDOW_SIZE)
+        self.geometry(self.prefs.window_geometry)
         self.minsize(800, 600)
 
         # --- App icon ---
@@ -32,6 +37,9 @@ class DocViewApp(ctk.CTk):
         self.main_window = MainWindow(self, self)
 
         self._bind_shortcuts()
+        self._setup_drag_and_drop()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        logger.info("DocViewApp initialized (theme=%s)", self.prefs.theme)
 
     def _set_icon(self):
         """Set the window icon from assets/."""
@@ -86,17 +94,103 @@ class DocViewApp(ctk.CTk):
         self.bind("<Control-b>", lambda e: self.main_window.sidebar.toggle())
 
     # ------------------------------------------------------------------
+    # window lifecycle
+    # ------------------------------------------------------------------
+
+    def _on_close(self):
+        """Save preferences and close the application."""
+        self.prefs.save_window_geometry(self.geometry())
+        vp = self.main_window.viewport
+        self.prefs.zoom = vp.zoom
+        self.prefs.save()
+        self.destroy()
+
+    def set_theme(self, theme: str):
+        """Switch appearance mode: 'dark', 'light', or 'system'."""
+        ctk.set_appearance_mode(theme)
+        self.prefs.theme = theme
+        self.prefs.save()
+        logger.info("Theme changed to: %s", theme)
+
+    # ------------------------------------------------------------------
+    # drag-and-drop
+    # ------------------------------------------------------------------
+
+    def _setup_drag_and_drop(self):
+        """Enable drag-and-drop file opening (Windows)."""
+        try:
+            import windnd
+            windnd.hook_dropfiles(self, func=self._on_files_dropped)
+            logger.info("Drag-and-drop enabled via windnd")
+        except ImportError:
+            logger.debug("windnd not available — drag-and-drop disabled")
+
+    def _on_files_dropped(self, file_list):
+        """Handle files dropped onto the window."""
+        _SUPPORTED = (
+            {".pdf", ".html", ".htm", ".md", ".markdown", ".mdown", ".mkd"}
+            | self._IMAGE_EXTENSIONS
+        )
+        for raw in file_list:
+            path = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+            ext = os.path.splitext(path)[1].lower()
+            if ext in _SUPPORTED:
+                logger.info("File dropped: %s", path)
+                self.open_file(path)
+                return  # open first valid file
+        logger.debug("Dropped files had no supported extension")
+
+    # ------------------------------------------------------------------
     # file operations
     # ------------------------------------------------------------------
 
+    # Supported file extensions by type
+    _HTML_EXTENSIONS = {".html", ".htm"}
+    _MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd"}
+    _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp", ".gif"}
+
     def open_file_dialog(self):
         path = filedialog.askopenfilename(
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+            filetypes=[
+                ("All supported",
+                 "*.pdf *.html *.htm *.md *.markdown "
+                 "*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.gif"),
+                ("PDF files", "*.pdf"),
+                ("Image files", "*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.gif"),
+                ("HTML files", "*.html *.htm"),
+                ("Markdown files", "*.md *.markdown"),
+                ("All files", "*.*"),
+            ]
         )
         if path:
             self.open_file(path)
 
     def open_file(self, file_path: str):
+        import os
+        logger.info("Opening file: %s", file_path)
+
+        ext = os.path.splitext(file_path)[1].lower()
+
+        # Route HTML/Markdown files to the HTML viewport
+        if ext in self._HTML_EXTENSIONS or ext in self._MARKDOWN_EXTENSIONS:
+            try:
+                from pathlib import Path
+                self.recent_files.add(file_path)
+                self.main_window.show_html(file_path)
+                name = Path(file_path).name
+                self.title(f"{WINDOW_TITLE} - {name}")
+                logger.info("HTML/MD file opened: %s", name)
+            except Exception as e:
+                log_exception(logger, "Failed to open HTML/MD file", e)
+                messagebox.showerror("Error", f"Failed to open file:\n{e}")
+            return
+
+        # Image file handling — convert to searchable PDF via OCR
+        if ext in self._IMAGE_EXTENSIONS:
+            self._open_image_as_pdf(file_path)
+            return
+
+        # PDF file handling
         try:
             # save current viewport state before switching
             self._save_current_state()
@@ -108,7 +202,10 @@ class DocViewApp(ctk.CTk):
             doc = self.pdf_doc
             if doc:
                 self.title(f"{WINDOW_TITLE} - {doc.file_name}")
+                logger.info("File opened successfully: %s (%d pages)",
+                            doc.file_name, doc.page_count)
         except Exception as e:
+            log_exception(logger, "Failed to open PDF", e)
             messagebox.showerror("Error", f"Failed to open PDF:\n{e}")
 
     def save_file(self):
@@ -122,12 +219,15 @@ class DocViewApp(ctk.CTk):
                     "Confirm Save",
                     f"Overwrite '{doc.file_name}'?")
                 if not confirm:
+                    logger.debug("Save cancelled by user for %s", doc.file_name)
                     return
             try:
                 doc.save()
+                logger.info("File saved: %s", doc.file_path)
                 self.update_status()
                 self.main_window.tab_bar.refresh()
             except Exception as e:
+                log_exception(logger, "Failed to save file", e)
                 messagebox.showerror("Error", f"Failed to save:\n{e}")
         else:
             self.save_file_as()
@@ -146,11 +246,93 @@ class DocViewApp(ctk.CTk):
                 tab = self.doc_manager.active_tab
                 if tab:
                     tab.file_path = path
+                logger.info("File saved as: %s", path)
                 self.title(f"{WINDOW_TITLE} - {doc.file_name}")
                 self.update_status()
                 self.main_window.tab_bar.refresh()
             except Exception as e:
+                log_exception(logger, "Failed to save file as", e)
                 messagebox.showerror("Error", f"Failed to save:\n{e}")
+
+    # ------------------------------------------------------------------
+    # image → PDF conversion
+    # ------------------------------------------------------------------
+
+    def _open_image_as_pdf(self, image_path: str):
+        """Convert an image to a searchable PDF and open it."""
+        import threading
+        from pathlib import Path
+
+        name = Path(image_path).stem
+        logger.info("Opening image as PDF: %s", image_path)
+
+        # Check if ocrmypdf is available
+        try:
+            import ocrmypdf  # noqa: F401
+        except ImportError:
+            messagebox.showerror(
+                "OCR Required",
+                "Opening image files requires OCRmyPDF.\n\n"
+                "Install with:\n  pip install ocrmypdf\n\n"
+                "Tesseract OCR must also be installed on your system.")
+            return
+
+        # Ask where to save the PDF
+        pdf_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf")],
+            initialfile=f"{name}.pdf",
+            title="Save converted PDF as"
+        )
+        if not pdf_path:
+            return
+
+        # Show a progress dialog
+        progress = ctk.CTkToplevel(self)
+        progress.title("Converting Image")
+        progress.geometry("360x120")
+        progress.resizable(False, False)
+        progress.transient(self)
+        progress.grab_set()
+
+        ctk.CTkLabel(
+            progress, text=f"Converting {Path(image_path).name} to PDF...",
+            font=ctk.CTkFont(family="Segoe UI", size=12)
+        ).pack(padx=20, pady=(20, 8))
+
+        bar = ctk.CTkProgressBar(progress, width=300)
+        bar.pack(padx=20, pady=8)
+        bar.configure(mode="indeterminate")
+        bar.start()
+
+        # Center
+        progress.update_idletasks()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        px, py = self.winfo_x(), self.winfo_y()
+        w, h = progress.winfo_width(), progress.winfo_height()
+        progress.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+
+        def convert():
+            try:
+                from app.core.image_to_pdf import image_to_pdf
+                image_to_pdf(image_path, pdf_path)
+                self.after(0, lambda: _on_done(None))
+            except Exception as e:
+                log_exception(logger, "Image→PDF conversion failed", e)
+                self.after(0, lambda err=str(e): _on_done(err))
+
+        def _on_done(error):
+            bar.stop()
+            progress.grab_release()
+            progress.destroy()
+            if error:
+                messagebox.showerror(
+                    "Conversion Error",
+                    f"Failed to convert image to PDF:\n\n{error}")
+            else:
+                self.open_file(pdf_path)
+
+        threading.Thread(target=convert, daemon=True).start()
 
     # ------------------------------------------------------------------
     # tab operations
@@ -200,23 +382,33 @@ class DocViewApp(ctk.CTk):
         from app.tools.select_tool import SelectTool
         from app.tools.text_tool import TextTool
         from app.tools.highlight_tool import HighlightTool
+        from app.tools.underline_tool import UnderlineTool
+        from app.tools.strikeout_tool import StrikeoutTool
         from app.tools.rect_tool import RectTool
         from app.tools.circle_tool import CircleTool
         from app.tools.line_tool import LineTool
+        from app.tools.arrow_tool import ArrowTool
         from app.tools.freehand_tool import FreehandTool
         from app.tools.redact_tool import RedactTool
         from app.tools.image_tool import ImageTool
+        from app.tools.sticky_note_tool import StickyNoteTool
+        from app.tools.stamp_tool import StampTool
 
         tool_map = {
             "select": SelectTool,
             "text": TextTool,
             "highlight": HighlightTool,
+            "underline": UnderlineTool,
+            "strikeout": StrikeoutTool,
             "rect": RectTool,
             "circle": CircleTool,
             "line": LineTool,
+            "arrow": ArrowTool,
             "freehand": FreehandTool,
             "redact": RedactTool,
             "image": ImageTool,
+            "sticky_note": StickyNoteTool,
+            "stamp": StampTool,
         }
 
         if tool_name in self._tool_instances:
@@ -227,6 +419,7 @@ class DocViewApp(ctk.CTk):
             self.active_tool = tool
 
         self.main_window.toolbar.highlight_tool(tool_name)
+        logger.debug("Tool activated: %s", tool_name)
 
         # show properties panel when annotation tool is active
         self.main_window.properties_panel.show()
@@ -322,6 +515,8 @@ class DocViewApp(ctk.CTk):
         """Push an annotation onto the undo stack (called by tools after add)."""
         self._undo_stack.append({"page": page_num, "annotation": annotation})
         self._redo_stack.clear()  # new action invalidates redo history
+        logger.debug("Undo push: page=%d, type=%s (stack=%d)",
+                      page_num, type(annotation).__name__, len(self._undo_stack))
 
     def undo(self):
         """Undo the last annotation (Ctrl+Z)."""
@@ -378,6 +573,7 @@ class DocViewApp(ctk.CTk):
             doc.modified = True
             self.main_window.viewport.load_document()
             self.update_status()
+            logger.info("Applied %d redaction(s) permanently", count)
             messagebox.showinfo(
                 "Redaction Applied",
                 f"Applied {count} redaction(s) permanently.\nRemember to save the file.")
@@ -409,6 +605,7 @@ class DocViewApp(ctk.CTk):
         import subprocess
         import sys
         import tempfile
+        logger.info("Print requested")
 
         doc = self.pdf_doc
         if not doc or not doc.is_open:
@@ -437,4 +634,5 @@ class DocViewApp(ctk.CTk):
                 # Linux
                 subprocess.Popen(["lp", file_path])
         except Exception as e:
+            log_exception(logger, "Print failed", e)
             messagebox.showerror("Print Error", f"Failed to print:\n{e}")

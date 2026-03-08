@@ -1,24 +1,68 @@
-"""Right-click context menu on the viewport canvas."""
+"""DocView right-click context menu — Cyber-Brutalist terminal-style popup.
+
+Strict theme compliance: BG_ABYSS, BORDER_RED, TEXT_RED, HOVER_RED.
+Courier font. Thick borders. Harsh aesthetic. All-caps labels.
+"""
 import tkinter as tk
+from app.config import (
+    BG_ABYSS, BORDER_RED, TEXT_RED,
+    HOVER_RED, COLOR_DANGER
+)
+
+
+_MENU_FONT = ("Courier", 11)
+_MENU_FONT_BOLD = ("Courier", 11, "bold")
 
 
 class ContextMenu:
+    """Harsh Cyber-Brutalist right-click popup menu."""
+
     def __init__(self, app_ref):
         self.app_ref = app_ref
-        self._menu = tk.Menu(app_ref, tearoff=0)
+        self._menu = tk.Menu(
+            app_ref, tearoff=0,
+            bg=BG_ABYSS,
+            fg=TEXT_RED,
+            activebackground=HOVER_RED,
+            activeforeground=TEXT_RED,
+            selectcolor=COLOR_DANGER,
+            font=_MENU_FONT,
+            borderwidth=2,
+            relief="solid",
+            activeborderwidth=0,
+        )
 
-        self._menu.add_command(label="Zoom In", command=self._zoom_in)
-        self._menu.add_command(label="Zoom Out", command=self._zoom_out)
-        self._menu.add_command(label="Fit Width", command=self._fit_width)
-        self._menu.add_separator()
-        self._menu.add_command(label="Hand Tool", command=lambda: self._set_tool(None))
-        self._menu.add_command(label="Select", command=lambda: self._set_tool("select"))
-        self._menu.add_command(label="Highlight", command=lambda: self._set_tool("highlight"))
-        self._menu.add_command(label="Rectangle", command=lambda: self._set_tool("rect"))
-        self._menu.add_command(label="Text", command=lambda: self._set_tool("text"))
-        self._menu.add_separator()
-        self._menu.add_command(label="Rotate Page", command=self._rotate)
-        self._menu.add_command(label="Delete Page", command=self._delete_page)
+        # --- Zoom section ---
+        self._menu.add_command(label="  ZOOM +", command=self._zoom_in,
+                               font=_MENU_FONT_BOLD)
+        self._menu.add_command(label="  ZOOM -", command=self._zoom_out,
+                               font=_MENU_FONT_BOLD)
+        self._menu.add_command(label="  FIT WIDTH", command=self._fit_width,
+                               font=_MENU_FONT_BOLD)
+        self._add_separator()
+
+        # --- Tool section ---
+        self._menu.add_command(label="  HAND TOOL",
+                               command=lambda: self._set_tool(None))
+        self._menu.add_command(label="  SELECT",
+                               command=lambda: self._set_tool("select"))
+        self._menu.add_command(label="  HIGHLIGHT",
+                               command=lambda: self._set_tool("highlight"))
+        self._menu.add_command(label="  RECTANGLE",
+                               command=lambda: self._set_tool("rect"))
+        self._menu.add_command(label="  TEXT",
+                               command=lambda: self._set_tool("text"))
+        self._add_separator()
+
+        # --- Page operations ---
+        self._menu.add_command(label="  ROTATE PAGE", command=self._rotate)
+        self._menu.add_command(label="  DELETE PAGE", command=self._delete_page,
+                               foreground=COLOR_DANGER,
+                               activeforeground=COLOR_DANGER)
+
+    def _add_separator(self):
+        """Add a themed separator line."""
+        self._menu.add_separator(background=BORDER_RED)
 
     def show(self, x: int, y: int):
         try:

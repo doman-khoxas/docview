@@ -21,20 +21,20 @@ class WelcomeScreen(ctk.CTkFrame):
                              text_color=TEXT_PRIMARY)
         title.pack(pady=(0, 8))
 
-        subtitle = ctk.CTkLabel(center, text="Standalone PDF editing tool",
+        subtitle = ctk.CTkLabel(center, text="PDF, HTML & Markdown viewer",
                                 font=ctk.CTkFont(family="Segoe UI", size=13),
                                 text_color=TEXT_SECONDARY)
         subtitle.pack(pady=(0, 6))
 
         details = ctk.CTkLabel(
             center,
-            text="Annotate \u2022 Highlight \u2022 Redact \u2022 OCR \u2022 Edit pages",
+            text="Annotate \u2022 Highlight \u2022 Redact \u2022 Edit pages \u2022 View HTML/MD",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=TEXT_MUTED)
         details.pack(pady=(0, 20))
 
         open_btn = ctk.CTkButton(
-            center, text="Open PDF", width=180, height=38,
+            center, text="Open File", width=180, height=38,
             font=ctk.CTkFont(family="Segoe UI", size=14),
             fg_color=ACCENT, hover_color=ACCENT_MUTED,
             text_color="#FFFFFF",

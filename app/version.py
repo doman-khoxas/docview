@@ -10,9 +10,9 @@ Version format: MAJOR.MINOR.PATCH[-PRERELEASE]
   PATCH — bug fixes, polish
 """
 
-__version__ = "2.0.0"
-__version_tuple__ = (2, 0, 0)
-__build_date__ = "2026-03-03"
+__version__ = "2.2.0"
+__version_tuple__ = (2, 2, 0)
+__build_date__ = "2026-03-07"
 __codename__ = "Brutalist"
 __author__ = "Kazuma"
 __app_name__ = "DocView"
@@ -30,6 +30,24 @@ FEATURES = {
     "multi_document": True,
     "search": True,
     "print": True,
+    "html_viewer": True,
+    "markdown_viewer": True,
+    "underline_strikeout": True,
+    "arrow_annotations": True,
+    "sticky_notes": True,
+    "stamp_annotations": True,
+    "form_filling": True,
+    "password_protection": True,
+    "watermark": True,
+    "image_export": True,
+    "drag_and_drop": True,
+    "threaded_rendering": True,
+    "theme_toggle": True,
+    "preferences_persistence": True,
+    "ocr": True,
+    "text_editing": True,
+    "cac_signing": True,
+    "find_replace": True,
 }
 
 

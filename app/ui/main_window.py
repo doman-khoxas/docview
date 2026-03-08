@@ -3,6 +3,7 @@ import customtkinter as ctk
 from app.ui.toolbar import Toolbar
 from app.ui.tab_bar import TabBar
 from app.ui.continuous_viewport import ContinuousViewport
+from app.ui.html_viewport import HTMLViewport
 from app.ui.sidebar import Sidebar
 from app.ui.properties_panel import PropertiesPanel
 from app.ui.status_bar import StatusBar
@@ -62,29 +63,44 @@ class MainWindow:
         # continuous viewport (hidden until file opened)
         self.viewport = ContinuousViewport(self._center, app_ref)
 
+        # HTML/Markdown viewport (hidden until HTML/MD file opened)
+        self.html_viewport = HTMLViewport(self._center, app_ref)
+
         # context menu
         self.context_menu = ContextMenu(app_ref)
 
         # overview panel (floats over center area)
         self.overview_panel = OverviewPanel(self._center, app_ref)
 
-        self._doc_open = False
+        # Track which view is active: "welcome", "pdf", "html"
+        self._active_view = "welcome"
+
+    def _hide_all_views(self):
+        """Hide all content views."""
+        self.welcome_screen.pack_forget()
+        self.viewport.pack_forget()
+        self.html_viewport.pack_forget()
 
     def show_document(self):
-        """Switch from welcome screen to document view."""
-        if not self._doc_open:
-            self.welcome_screen.pack_forget()
-            self.viewport.pack(fill="both", expand=True)
-            self._doc_open = True
+        """Switch from welcome screen to PDF document view."""
+        self._hide_all_views()
+        self.viewport.pack(fill="both", expand=True)
+        self._active_view = "pdf"
         self.viewport.load_document()
         self.tab_bar.refresh()
         self.sidebar.refresh()
 
+    def show_html(self, file_path: str):
+        """Switch to HTML/Markdown rendered view."""
+        self._hide_all_views()
+        self.html_viewport.pack(fill="both", expand=True)
+        self._active_view = "html"
+        self.html_viewport.load_file(file_path)
+
     def show_welcome(self):
         """Switch back to welcome screen (all tabs closed)."""
-        if self._doc_open:
-            self.viewport.pack_forget()
-            self.welcome_screen.pack(fill="both", expand=True)
-            self.welcome_screen.refresh_recent()
-            self._doc_open = False
+        self._hide_all_views()
+        self.welcome_screen.pack(fill="both", expand=True)
+        self.welcome_screen.refresh_recent()
+        self._active_view = "welcome"
         self.tab_bar.refresh()
