@@ -28,9 +28,9 @@ INSTALLER_SCRIPT = "installer.iss"
 
 # Inno Setup default install locations
 INNO_PATHS = [
+    r"C:\Users\gt8le\AppData\Local\Programs\Inno Setup 6\ISCC.exe",
     r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     r"C:\Program Files\Inno Setup 6\ISCC.exe",
-    r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
 ]
 
 

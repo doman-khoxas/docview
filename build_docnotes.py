@@ -110,6 +110,7 @@ def build(onedir=False):
 
 
 INNO_PATHS = [
+    r"C:\Users\gt8le\AppData\Local\Programs\Inno Setup 6\ISCC.exe",
     r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     r"C:\Program Files\Inno Setup 6\ISCC.exe",
 ]
