@@ -1,0 +1,1 @@
+"""DocNotes core data model."""
