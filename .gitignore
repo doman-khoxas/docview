@@ -22,3 +22,4 @@ web/uploads/
 
 # Installer output
 DocView_*_Setup.exe
+.claude/

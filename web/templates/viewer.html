@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocView — Viewer</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/viewer.css">
+</head>
+<body>
+    <div class="toolbar">
+        <a href="/" class="toolbar-brand">DocView</a>
+        <div class="toolbar-group">
+            <button id="prevBtn" title="Previous page">&laquo;</button>
+            <span id="pageInfo">1 / 1</span>
+            <button id="nextBtn" title="Next page">&raquo;</button>
+        </div>
+        <div class="toolbar-group">
+            <button id="zoomOut" title="Zoom out">&minus;</button>
+            <span id="zoomLevel">100%</span>
+            <button id="zoomIn" title="Zoom in">+</button>
+            <button id="fitWidth" title="Fit width">Fit</button>
+        </div>
+        <div class="toolbar-group">
+            <button id="rotateBtn" title="Rotate page 90 degrees">Rotate</button>
+            <button id="deleteBtn" title="Delete current page">Delete</button>
+        </div>
+        <div class="toolbar-group toolbar-right">
+            <button id="textBtn" title="Extract text">Text</button>
+            <button id="downloadBtn" title="Download PDF">Download</button>
+        </div>
+    </div>
+
+    <div class="viewer-area" id="viewerArea">
+        <canvas id="pdfCanvas"></canvas>
+        <div class="loading" id="loading">Loading...</div>
+    </div>
+
+    <div class="text-panel" id="textPanel">
+        <div class="text-panel-header">
+            <span>Extracted Text</span>
+            <button id="closeTextBtn">Close</button>
+        </div>
+        <pre id="textContent"></pre>
+    </div>
+
+    <script>
+        const DOC_ID = "{{ doc_id }}";
+    </script>
+    <script src="/static/js/viewer.js"></script>
+</body>
+</html>
