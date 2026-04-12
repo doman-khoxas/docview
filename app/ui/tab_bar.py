@@ -1,60 +1,56 @@
-"""Horizontal document tabs with click-to-switch and close button."""
-import customtkinter as ctk
-from pathlib import Path
+"""Document tab bar with close buttons and modified indicators."""
+from PyQt5.QtWidgets import QTabBar
+from PyQt5.QtCore import pyqtSignal, Qt
 from app.config import TAB_HEIGHT, TAB_MAX_TITLE_LEN
 
 
-class TabBar(ctk.CTkFrame):
-    def __init__(self, parent, app_ref):
-        super().__init__(parent, height=TAB_HEIGHT, fg_color=("gray85", "gray20"))
-        self.app_ref = app_ref
-        self.pack_propagate(False)
-        self._tab_buttons: list[ctk.CTkFrame] = []
+class DocTabBar(QTabBar):
+    """Tab bar for open documents with close buttons."""
 
-    def refresh(self):
-        for w in self._tab_buttons:
-            w.destroy()
-        self._tab_buttons.clear()
+    tab_switch_requested = pyqtSignal(int)
+    tab_close_requested = pyqtSignal(int)
 
-        doc_mgr = self.app_ref.doc_manager
-        for i, tab in enumerate(doc_mgr.get_all_tabs()):
-            self._create_tab_widget(i, tab)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTabsClosable(True)
+        self.setMovable(True)
+        self.setExpanding(False)
+        self.setDocumentMode(True)
+        self.setElideMode(Qt.ElideRight)
+        self.setFixedHeight(TAB_HEIGHT)
 
-    def _create_tab_widget(self, index: int, tab):
-        is_active = (index == self.app_ref.doc_manager.active_index)
+        self.currentChanged.connect(self._on_current_changed)
+        self.tabCloseRequested.connect(self._on_close_requested)
 
-        frame = ctk.CTkFrame(
-            self, height=TAB_HEIGHT - 4,
-            fg_color=("white", "gray30") if is_active else ("gray90", "gray22"),
-            corner_radius=4)
-        frame.pack(side="left", padx=(2, 0), pady=2)
-        frame.pack_propagate(False)
+    def _on_current_changed(self, index):
+        if index >= 0:
+            self.tab_switch_requested.emit(index)
 
-        name = Path(tab.file_path).name if tab.file_path else "Untitled"
-        if len(name) > TAB_MAX_TITLE_LEN:
-            name = name[:TAB_MAX_TITLE_LEN - 2] + ".."
-        if tab.pdf_doc.modified:
-            name = "* " + name
+    def _on_close_requested(self, index):
+        self.tab_close_requested.emit(index)
 
-        label = ctk.CTkLabel(frame, text=name, font=ctk.CTkFont(size=11),
-                             cursor="hand2", padx=8)
-        label.pack(side="left", fill="y")
-        label.bind("<Button-1>", lambda e, idx=index: self._on_click(idx))
+    def refresh_tabs(self, tabs: list):
+        """Rebuild tabs from DocumentManager tab list.
 
-        close_btn = ctk.CTkButton(
-            frame, text="x", width=18, height=18, font=ctk.CTkFont(size=10),
-            fg_color="transparent", hover_color=("gray70", "gray45"),
-            command=lambda idx=index: self._on_close(idx))
-        close_btn.pack(side="right", padx=(0, 2))
+        Args:
+            tabs: list of TabState objects
+        """
+        self.blockSignals(True)
+        while self.count():
+            self.removeTab(0)
 
-        # set fixed width
-        frame.configure(width=label.cget("font").cget("size") * len(name) // 2 + 50)
-        frame.configure(width=min(200, max(80, len(name) * 8 + 40)))
+        for tab in tabs:
+            doc = tab.document
+            name = doc.file_name
+            if len(name) > TAB_MAX_TITLE_LEN:
+                name = name[:TAB_MAX_TITLE_LEN - 3] + "..."
+            if doc.modified:
+                name = f"\u2022 {name}"
+            self.addTab(name)
 
-        self._tab_buttons.append(frame)
+        self.blockSignals(False)
 
-    def _on_click(self, index: int):
-        self.app_ref.switch_tab(index)
-
-    def _on_close(self, index: int):
-        self.app_ref.close_tab(index)
+    def set_active_tab(self, index: int):
+        self.blockSignals(True)
+        self.setCurrentIndex(index)
+        self.blockSignals(False)

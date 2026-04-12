@@ -1,0 +1,1 @@
+"""Sticky note components."""

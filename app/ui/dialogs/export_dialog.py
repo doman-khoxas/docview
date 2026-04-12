@@ -1,44 +1,40 @@
 """Export/Save-As dialog with flatten option."""
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QCheckBox, QPushButton, QLabel,
+    QFileDialog, QMessageBox, QDialogButtonBox
+)
+from PyQt5.QtGui import QFont
 
 
-class ExportDialog(ctk.CTkToplevel):
-    def __init__(self, app_ref):
-        super().__init__(app_ref)
-        self.app_ref = app_ref
-        self.title("Export PDF")
-        self.geometry("380x180")
+class ExportDialog(QDialog):
+    def __init__(self, pdf_doc, parent=None):
+        super().__init__(parent)
+        self._doc = pdf_doc
+        self.setWindowTitle("Export PDF")
+        self.resize(380, 150)
+        self._setup_ui()
 
-        doc = app_ref.pdf_doc
-        if not doc.is_open:
-            self.destroy()
-            return
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
 
-        ctk.CTkLabel(self, text="Export Options",
-                     font=ctk.CTkFont(size=13, weight="bold")).pack(pady=(10, 5))
+        layout.addWidget(QLabel("Export Options"))
 
-        self._flatten_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(self, text="Flatten annotations (burn into page)",
-                        variable=self._flatten_var).pack(pady=10)
+        self._flatten_check = QCheckBox("Flatten annotations (burn into page)")
+        layout.addWidget(self._flatten_check)
 
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
-        action_frame.pack(pady=15)
-        ctk.CTkButton(action_frame, text="Export", width=100, command=self._export).pack(side="left", padx=5)
-        ctk.CTkButton(action_frame, text="Cancel", width=100, command=self.destroy).pack(side="left", padx=5)
+        buttons = QDialogButtonBox()
+        export_btn = buttons.addButton("Export", QDialogButtonBox.AcceptRole)
+        export_btn.clicked.connect(self._export)
+        buttons.addButton(QDialogButtonBox.Cancel).clicked.connect(self.reject)
+        layout.addWidget(buttons)
 
     def _export(self):
-        path = filedialog.asksaveasfilename(
-            defaultextension=".pdf",
-            filetypes=[("PDF files", "*.pdf")],
-            parent=self
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Export PDF", "", "PDF Files (*.pdf)")
         if not path:
             return
-
         try:
-            self.app_ref.pdf_doc.save_as(path, flatten=self._flatten_var.get())
-            messagebox.showinfo("Export", f"Exported to:\n{path}", parent=self)
-            self.destroy()
+            self._doc.save_as(path, flatten=self._flatten_check.isChecked())
+            QMessageBox.information(self, "Export", f"Exported to:\n{path}")
+            self.accept()
         except Exception as e:
-            messagebox.showerror("Error", f"Export failed:\n{e}", parent=self)
+            QMessageBox.critical(self, "Error", f"Export failed:\n{e}")

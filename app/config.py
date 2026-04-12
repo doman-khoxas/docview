@@ -1,10 +1,12 @@
-"""Application constants."""
+"""Application constants and configuration."""
+from app.version import APP_NAME
 
 # Window
-WINDOW_TITLE = "PDF Editor"
-WINDOW_SIZE = "1200x800"
-APPEARANCE_MODE = "dark"
-COLOR_THEME = "blue"
+WINDOW_TITLE = APP_NAME
+WINDOW_WIDTH = 1200
+WINDOW_HEIGHT = 800
+MIN_WIDTH = 800
+MIN_HEIGHT = 600
 
 # Zoom
 ZOOM_DEFAULT = 1.0
@@ -30,31 +32,44 @@ DEFAULT_OPACITY = 0.5
 DEFAULT_FONT_SIZE = 12
 DEFAULT_BORDER_WIDTH = 2
 
-# Colors
-CANVAS_BG = "#404040"
-ACTIVE_THUMBNAIL_BORDER = "#3B8ED0"
-THUMBNAIL_BORDER = "#555555"
-
-# Lazy thumbnail threshold
-LAZY_THUMBNAIL_THRESHOLD = 100
-
-# --- Continuous viewport ---
+# Continuous viewport
 PAGE_GAP = 12
 PAGE_SHADOW_OFFSET = 4
-PAGE_SHADOW_COLOR = "#2a2a2a"
 OVERSCAN_PX = 200
 PAGE_CACHE_SIZE = 20
 
-# --- Sidebar ---
+# Sidebar
 SIDEBAR_WIDTH = 220
 
-# --- Tab bar ---
+# Tab bar
 TAB_HEIGHT = 32
 TAB_MAX_TITLE_LEN = 25
 
-# --- Recent files ---
+# Recent files
 RECENT_FILES_MAX = 10
 
-# --- Search ---
+# Search
 SEARCH_HIGHLIGHT_COLOR = "#FFD700"
 SEARCH_ACTIVE_COLOR = "#FF6600"
+
+# Markdown editor
+MD_FONT_FAMILY = "Consolas"
+MD_FONT_SIZE = 13
+MD_LINE_NUMBER_BG = "#2d2d2d"
+MD_LINE_NUMBER_FG = "#858585"
+MD_PREVIEW_CSS_BG = "#1e1e1e"
+MD_PREVIEW_CSS_FG = "#cccccc"
+
+# Obsidian
+DEFAULT_VAULT_PATH = ""
+
+# Sticky notes
+STICKY_NOTE_DIR = ".docview/sticky-notes"
+STICKY_NOTE_WIDTH = 250
+STICKY_NOTE_HEIGHT = 250
+STICKY_AUTOSAVE_MS = 500
+
+# Supported file extensions
+PDF_EXTENSIONS = {".pdf"}
+MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd"}
+ALL_SUPPORTED_EXTENSIONS = PDF_EXTENSIONS | MARKDOWN_EXTENSIONS

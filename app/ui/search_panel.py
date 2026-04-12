@@ -1,83 +1,95 @@
-"""Ctrl+F search bar with prev/next result navigation."""
-import customtkinter as ctk
+"""Search bar with prev/next navigation."""
+from PyQt5.QtWidgets import (
+    QWidget, QHBoxLayout, QLineEdit, QPushButton, QLabel
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from app.ui.theme import BG_SURFACE, BORDER
 
 
-class SearchPanel(ctk.CTkFrame):
-    def __init__(self, parent, app_ref):
-        super().__init__(parent, height=36, fg_color=("gray90", "gray20"))
-        self.app_ref = app_ref
-        self.pack_propagate(False)
-        self._results: list[tuple[int, list]] = []  # [(page_num, [Rect,...]), ...]
+class SearchPanel(QWidget):
+    """Ctrl+F search bar for PDF text search."""
+
+    close_requested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(36)
+        self._results: list[tuple[int, list]] = []
+        self._flat_results: list[tuple[int, int]] = []
         self._current_idx = -1
-        self._flat_results: list[tuple[int, int]] = []  # [(page_num, rect_idx), ...]
+        self._search_callback = None
+        self._navigate_callback = None
 
-        self._entry_var = ctk.StringVar()
-        self._entry = ctk.CTkEntry(self, textvariable=self._entry_var,
-                                   width=250, height=28, placeholder_text="Search...")
-        self._entry.pack(side="left", padx=(8, 4), pady=4)
-        self._entry.bind("<Return>", lambda e: self._do_search())
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(4)
 
-        search_btn = ctk.CTkButton(self, text="Find", width=50, height=26,
-                                   command=self._do_search)
-        search_btn.pack(side="left", padx=2)
+        self._entry = QLineEdit()
+        self._entry.setPlaceholderText("Search...")
+        self._entry.setFixedWidth(250)
+        self._entry.returnPressed.connect(self._do_search)
+        layout.addWidget(self._entry)
 
-        prev_btn = ctk.CTkButton(self, text="<", width=28, height=26,
-                                 command=self._prev_result)
-        prev_btn.pack(side="left", padx=1)
+        find_btn = QPushButton("Find")
+        find_btn.setFixedWidth(50)
+        find_btn.clicked.connect(self._do_search)
+        layout.addWidget(find_btn)
 
-        next_btn = ctk.CTkButton(self, text=">", width=28, height=26,
-                                 command=self._next_result)
-        next_btn.pack(side="left", padx=1)
+        prev_btn = QPushButton("<")
+        prev_btn.setFixedWidth(28)
+        prev_btn.clicked.connect(self._prev_result)
+        layout.addWidget(prev_btn)
 
-        self._count_label = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=11))
-        self._count_label.pack(side="left", padx=8)
+        next_btn = QPushButton(">")
+        next_btn.setFixedWidth(28)
+        next_btn.clicked.connect(self._next_result)
+        layout.addWidget(next_btn)
 
-        close_btn = ctk.CTkButton(self, text="x", width=26, height=26,
-                                  fg_color="transparent",
-                                  hover_color=("gray75", "gray35"),
-                                  command=self.close)
-        close_btn.pack(side="right", padx=4)
+        self._count_label = QLabel("")
+        layout.addWidget(self._count_label)
+
+        layout.addStretch()
+
+        close_btn = QPushButton("\u00d7")
+        close_btn.setFixedSize(26, 26)
+        close_btn.clicked.connect(self._close)
+        layout.addWidget(close_btn)
+
+        self.hide()
+
+    def set_callbacks(self, search_fn, navigate_fn):
+        """Set callbacks for search and navigation."""
+        self._search_callback = search_fn
+        self._navigate_callback = navigate_fn
 
     def open(self):
-        self.pack(fill="x", side="top")
-        self._entry.focus_set()
-        self._entry.select_range(0, "end")
+        self.show()
+        self._entry.setFocus()
+        self._entry.selectAll()
 
-    def close(self):
-        self.pack_forget()
-        vp = self.app_ref.main_window.viewport
-        vp.clear_search_highlights()
+    def _close(self):
+        self.hide()
         self._results.clear()
         self._flat_results.clear()
         self._current_idx = -1
-        self._count_label.configure(text="")
+        self._count_label.setText("")
+        self.close_requested.emit()
 
     @property
     def is_open(self) -> bool:
-        return self.winfo_manager() != ""
+        return self.isVisible()
 
     def _do_search(self):
-        query = self._entry_var.get().strip()
-        if not query:
+        query = self._entry.text().strip()
+        if not query or not self._search_callback:
             return
 
-        doc = self.app_ref.pdf_doc
-        if not doc or not doc.is_open:
-            return
-
-        self._results.clear()
+        self._results = self._search_callback(query)
         self._flat_results.clear()
 
-        for pn in range(doc.page_count):
-            page = doc.get_page(pn)
-            rects = page.search_for(query)
-            if rects:
-                self._results.append((pn, rects))
-                for ri in range(len(rects)):
-                    self._flat_results.append((pn, ri))
-
-        vp = self.app_ref.main_window.viewport
-        vp.highlight_search_results(self._results)
+        for pn, rects in self._results:
+            for ri in range(len(rects)):
+                self._flat_results.append((pn, ri))
 
         total = len(self._flat_results)
         if total > 0:
@@ -85,15 +97,16 @@ class SearchPanel(ctk.CTkFrame):
             self._navigate_to_current()
         else:
             self._current_idx = -1
-            self._count_label.configure(text="No results")
+            self._count_label.setText("No results")
 
     def _navigate_to_current(self):
         if not self._flat_results or self._current_idx < 0:
             return
         total = len(self._flat_results)
         page_num, _ = self._flat_results[self._current_idx]
-        self.app_ref.main_window.viewport.go_to_page(page_num)
-        self._count_label.configure(text=f"{self._current_idx + 1} / {total}")
+        if self._navigate_callback:
+            self._navigate_callback(page_num)
+        self._count_label.setText(f"{self._current_idx + 1} / {total}")
 
     def _next_result(self):
         if not self._flat_results:

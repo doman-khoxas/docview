@@ -62,6 +62,16 @@ class InkAnnotation(AnnotationBase):
     border_width: float = 2
 
 
+@dataclass
+class ImageAnnotation(AnnotationBase):
+    x: float = 0
+    y: float = 0
+    width: float = 100
+    height: float = 100
+    image_path: str = ""
+    image_data: bytes = field(default_factory=bytes, repr=False)  # raw image bytes
+
+
 def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
     h = hex_color.lstrip("#")
     return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
@@ -124,3 +134,12 @@ def commit_to_pdf(page: fitz.Page, annotation):
             annot.set_colors(stroke=_hex_to_rgb(annotation.color))
             annot.set_opacity(annotation.opacity)
             annot.update()
+
+    elif isinstance(annotation, ImageAnnotation):
+        rect = fitz.Rect(annotation.x, annotation.y,
+                         annotation.x + annotation.width,
+                         annotation.y + annotation.height)
+        if annotation.image_data:
+            page.insert_image(rect, stream=annotation.image_data)
+        elif annotation.image_path:
+            page.insert_image(rect, filename=annotation.image_path)

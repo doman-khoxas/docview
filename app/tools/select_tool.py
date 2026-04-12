@@ -1,25 +1,28 @@
 """Select/move existing annotations."""
+import math
+from PyQt5.QtCore import QPointF
 from app.tools.base_tool import BaseTool
-from app.core.pdf_renderer import canvas_to_pdf_coords, get_render_scale
+from app.core.pdf_renderer import get_render_scale
+from app.core.annotation_model import LineAnnotation
 
 
 class SelectTool(BaseTool):
-    def __init__(self, app_ref):
-        super().__init__(app_ref)
+    def __init__(self, main_window):
+        super().__init__(main_window)
         self._selected_annot = None
         self._drag_start = None
 
-    def on_press(self, x: float, y: float):
-        self._selected_annot = self._find_annotation_at(x, y)
+    def on_press(self, page_pos: QPointF):
+        self._selected_annot = self._find_annotation_at(page_pos)
         if self._selected_annot:
-            self._drag_start = (x, y)
+            self._drag_start = page_pos
 
-    def on_drag(self, x: float, y: float):
+    def on_drag(self, page_pos: QPointF):
         if not self._selected_annot or not self._drag_start:
             return
-        dx = x - self._drag_start[0]
-        dy = y - self._drag_start[1]
-        self._drag_start = (x, y)
+        dx = page_pos.x() - self._drag_start.x()
+        dy = page_pos.y() - self._drag_start.y()
+        self._drag_start = page_pos
 
         scale = get_render_scale(self.viewport.zoom)
         pdf_dx = dx / scale
@@ -37,30 +40,28 @@ class SelectTool(BaseTool):
         elif hasattr(annot, 'points'):
             annot.points = [(px + pdf_dx, py + pdf_dy) for px, py in annot.points]
 
-        self.viewport.render_current_page()
+        self._refresh_page()
 
-    def on_release(self, x: float, y: float):
+    def on_release(self, page_pos: QPointF):
         self._drag_start = None
 
     def delete_selected(self):
         if self._selected_annot:
             page_num = self.viewport.current_page
-            self.app_ref.pdf_doc.remove_pending_annotation(page_num, self._selected_annot)
+            self.pdf_doc.remove_pending_annotation(page_num, self._selected_annot)
             self._selected_annot = None
-            self.viewport.render_current_page()
+            self._refresh_page()
 
-    def _find_annotation_at(self, cx: float, cy: float):
+    def _find_annotation_at(self, page_pos: QPointF):
         scale = get_render_scale(self.viewport.zoom)
-        px, py = cx / scale, cy / scale
+        px, py = page_pos.x() / scale, page_pos.y() / scale
         page_num = self.viewport.current_page
-        annotations = self.app_ref.pdf_doc.get_pending_annotations(page_num)
+        annotations = self.pdf_doc.get_pending_annotations(page_num)
 
         for annot in reversed(annotations):
-            if hasattr(annot, 'x0') and hasattr(annot, 'y0') and hasattr(annot, 'x1') and hasattr(annot, 'y1'):
+            if hasattr(annot, 'x0') and hasattr(annot, 'x1'):
                 ax0, ax1 = min(annot.x0, annot.x1), max(annot.x0, annot.x1)
                 ay0, ay1 = min(annot.y0, annot.y1), max(annot.y0, annot.y1)
-                # For lines, use proximity check with tolerance
-                from app.core.annotation_model import LineAnnotation
                 if isinstance(annot, LineAnnotation):
                     if self._point_near_line(px, py, annot.x0, annot.y0, annot.x1, annot.y1, 8):
                         return annot
@@ -77,7 +78,6 @@ class SelectTool(BaseTool):
 
     @staticmethod
     def _point_near_line(px, py, x0, y0, x1, y1, tolerance):
-        import math
         dx, dy = x1 - x0, y1 - y0
         length_sq = dx * dx + dy * dy
         if length_sq == 0:

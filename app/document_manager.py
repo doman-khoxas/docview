@@ -1,17 +1,24 @@
-"""Multi-document manager with per-tab state."""
-from dataclasses import dataclass
+"""Multi-document manager with per-tab state, supporting PDF and Markdown."""
+from dataclasses import dataclass, field
 from pathlib import Path
+from app.core.document import Document
 from app.core.pdf_document import PDFDocument
-from app.config import ZOOM_DEFAULT
+from app.core.command import CommandStack
+from app.config import ZOOM_DEFAULT, MARKDOWN_EXTENSIONS, PDF_EXTENSIONS
 
 
 @dataclass
 class TabState:
-    pdf_doc: PDFDocument
+    document: Document
     file_path: str | None = None
+    command_stack: CommandStack = field(default_factory=CommandStack)
+    # PDF-specific viewport state
     scroll_y: float = 0.0
     zoom: float = ZOOM_DEFAULT
     active_tool_name: str | None = None
+    # Markdown-specific state
+    cursor_position: int = 0
+    scroll_offset: int = 0
 
 
 class DocumentManager:
@@ -26,9 +33,9 @@ class DocumentManager:
         return None
 
     @property
-    def active_document(self) -> PDFDocument | None:
+    def active_document(self) -> Document | None:
         tab = self.active_tab
-        return tab.pdf_doc if tab else None
+        return tab.document if tab else None
 
     @property
     def active_index(self) -> int:
@@ -49,14 +56,27 @@ class DocumentManager:
     def open_document(self, file_path: str) -> int:
         """Open a document in a new tab. Returns the tab index."""
         resolved = str(Path(file_path).resolve())
+
+        # Check if already open
         for i, tab in enumerate(self._tabs):
             if tab.file_path and str(Path(tab.file_path).resolve()) == resolved:
                 self._active_index = i
                 return i
 
-        doc = PDFDocument()
+        # Create appropriate document type
+        suffix = Path(file_path).suffix.lower()
+        if suffix in MARKDOWN_EXTENSIONS:
+            from app.core.markdown_document import MarkdownDocument
+            doc = MarkdownDocument()
+        elif suffix in PDF_EXTENSIONS:
+            doc = PDFDocument()
+        else:
+            # Default to markdown for text files
+            from app.core.markdown_document import MarkdownDocument
+            doc = MarkdownDocument()
+
         doc.open(file_path)
-        tab = TabState(pdf_doc=doc, file_path=file_path)
+        tab = TabState(document=doc, file_path=file_path)
         self._tabs.append(tab)
         self._active_index = len(self._tabs) - 1
         return self._active_index
@@ -67,7 +87,7 @@ class DocumentManager:
             return len(self._tabs) > 0
 
         tab = self._tabs[index]
-        tab.pdf_doc.close()
+        tab.document.close()
         self._tabs.pop(index)
 
         if len(self._tabs) == 0:
@@ -85,10 +105,16 @@ class DocumentManager:
 
     def save_viewport_state(self, scroll_y: float, zoom: float, tool_name: str | None):
         tab = self.active_tab
-        if tab:
+        if tab and tab.document.content_type == "pdf":
             tab.scroll_y = scroll_y
             tab.zoom = zoom
             tab.active_tool_name = tool_name
 
+    def save_editor_state(self, cursor_position: int, scroll_offset: int):
+        tab = self.active_tab
+        if tab and tab.document.content_type == "markdown":
+            tab.cursor_position = cursor_position
+            tab.scroll_offset = scroll_offset
+
     def has_unsaved_changes(self) -> bool:
-        return any(tab.pdf_doc.modified for tab in self._tabs)
+        return any(tab.document.modified for tab in self._tabs)

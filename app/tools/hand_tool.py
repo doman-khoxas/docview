@@ -1,16 +1,17 @@
-"""Default pan tool — click-drag scrolls the viewport via canvas scan."""
+"""Hand/pan tool — handled by QGraphicsView.ScrollHandDrag mode."""
+from PyQt5.QtCore import QPointF
 from app.tools.base_tool import BaseTool
 
 
 class HandTool(BaseTool):
-    """Hand tool for panning. Handled specially by the viewport using
-    canvas.scan_mark / scan_dragto with raw widget coordinates."""
+    """Hand tool for panning. In PyQt5, panning is handled by
+    QGraphicsView.ScrollHandDrag mode, so this tool is mostly a no-op."""
 
-    def on_press(self, x: float, y: float):
+    def on_press(self, scene_pos: QPointF):
         pass
 
-    def on_drag(self, x: float, y: float):
+    def on_drag(self, scene_pos: QPointF):
         pass
 
-    def on_release(self, x: float, y: float):
+    def on_release(self, scene_pos: QPointF):
         pass

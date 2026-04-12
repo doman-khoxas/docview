@@ -1,77 +1,100 @@
-"""Status bar with zoom slider, editable page number field, and file info."""
-import customtkinter as ctk
-from app.config import ZOOM_MIN, ZOOM_MAX
+"""Status bar with page info, zoom slider, and file info."""
+from PyQt5.QtWidgets import (
+    QStatusBar, QLabel, QSlider, QWidget, QHBoxLayout, QLineEdit
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from app.config import ZOOM_MIN, ZOOM_MAX, ZOOM_DEFAULT
 
 
-class StatusBar(ctk.CTkFrame):
-    def __init__(self, parent, app_ref):
-        super().__init__(parent, height=28, fg_color=("gray88", "gray18"))
-        self.app_ref = app_ref
-        self.pack_propagate(False)
+class DocStatusBar(QStatusBar):
+    """Status bar with file info, page entry, and zoom control."""
 
-        # ── left: file name ──
-        self.file_label = ctk.CTkLabel(self, text="No file open", anchor="w",
-                                       font=ctk.CTkFont(size=11))
-        self.file_label.pack(side="left", padx=10)
+    zoom_requested = pyqtSignal(float)
+    page_requested = pyqtSignal(int)
 
-        # ── right: zoom slider + zoom % ──
-        right = ctk.CTkFrame(self, fg_color="transparent")
-        right.pack(side="right", padx=6)
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-        self.zoom_label = ctk.CTkLabel(right, text="100%", width=42,
-                                       font=ctk.CTkFont(size=11))
-        self.zoom_label.pack(side="right", padx=(4, 0))
+        # File info (left permanent widget)
+        self._file_label = QLabel("")
+        self._file_label.setStyleSheet("color: #ffffff; padding: 0 8px;")
+        self.addPermanentWidget(self._file_label, 1)
 
-        self.zoom_slider = ctk.CTkSlider(
-            right, from_=ZOOM_MIN, to=ZOOM_MAX,
-            width=120, height=14,
-            command=self._on_zoom_slider)
-        self.zoom_slider.set(1.0)
-        self.zoom_slider.pack(side="right")
+        # Page entry
+        page_widget = QWidget()
+        page_layout = QHBoxLayout(page_widget)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(4)
 
-        ctk.CTkLabel(right, text="Zoom:", font=ctk.CTkFont(size=10)).pack(
-            side="right", padx=(0, 4))
+        page_label = QLabel("Page")
+        page_label.setStyleSheet("color: #ffffff;")
+        page_layout.addWidget(page_label)
 
-        # ── center-right: editable page field ──
-        page_frame = ctk.CTkFrame(self, fg_color="transparent")
-        page_frame.pack(side="right", padx=10)
+        self._page_entry = QLineEdit("0")
+        self._page_entry.setFixedWidth(40)
+        self._page_entry.setAlignment(Qt.AlignCenter)
+        self._page_entry.setStyleSheet(
+            "background: rgba(255,255,255,0.2); color: #ffffff; "
+            "border: 1px solid rgba(255,255,255,0.3); border-radius: 2px; padding: 1px;"
+        )
+        self._page_entry.returnPressed.connect(self._on_page_entry)
+        page_layout.addWidget(self._page_entry)
 
-        self._total_pages = 0
-        self.page_var = ctk.StringVar(value="0")
-        self.page_entry = ctk.CTkEntry(page_frame, textvariable=self.page_var,
-                                       width=40, height=22,
-                                       font=ctk.CTkFont(size=11),
-                                       justify="center")
-        self.page_entry.pack(side="left")
-        self.page_entry.bind("<Return>", self._on_page_entry)
+        self._page_total = QLabel("/ 0")
+        self._page_total.setStyleSheet("color: #ffffff;")
+        page_layout.addWidget(self._page_total)
 
-        self.total_label = ctk.CTkLabel(page_frame, text=" / 0",
-                                        font=ctk.CTkFont(size=11))
-        self.total_label.pack(side="left")
+        self.addPermanentWidget(page_widget)
 
-    def update_info(self, file_name: str, page_num: int, page_count: int, zoom: float):
-        self.file_label.configure(text=file_name or "No file open")
-        self._total_pages = page_count
-        if page_count > 0:
-            self.page_var.set(str(page_num + 1))
-            self.total_label.configure(text=f" / {page_count}")
-            self.zoom_slider.set(zoom)
-            self.zoom_label.configure(text=f"{int(zoom * 100)}%")
-        else:
-            self.page_var.set("0")
-            self.total_label.configure(text=" / 0")
-            self.zoom_label.configure(text="")
+        # Zoom slider
+        zoom_widget = QWidget()
+        zoom_layout = QHBoxLayout(zoom_widget)
+        zoom_layout.setContentsMargins(8, 0, 8, 0)
+        zoom_layout.setSpacing(4)
 
-    def _on_zoom_slider(self, value: float):
-        vp = self.app_ref.main_window.viewport
-        vp.set_zoom(round(value, 2))
-        self.zoom_label.configure(text=f"{int(vp.zoom * 100)}%")
-        self.app_ref.update_status()
+        zoom_out_label = QLabel("\u2212")
+        zoom_out_label.setStyleSheet("color: #ffffff; font-size: 14px;")
+        zoom_layout.addWidget(zoom_out_label)
 
-    def _on_page_entry(self, event=None):
+        self._zoom_slider = QSlider(Qt.Horizontal)
+        self._zoom_slider.setRange(int(ZOOM_MIN * 100), int(ZOOM_MAX * 100))
+        self._zoom_slider.setValue(int(ZOOM_DEFAULT * 100))
+        self._zoom_slider.setFixedWidth(120)
+        self._zoom_slider.setStyleSheet(
+            "QSlider::groove:horizontal { background: rgba(255,255,255,0.3); height: 3px; border-radius: 1px; }"
+            "QSlider::handle:horizontal { background: #ffffff; width: 10px; height: 10px; margin: -4px 0; border-radius: 5px; }"
+        )
+        self._zoom_slider.valueChanged.connect(self._on_zoom_slider)
+        zoom_layout.addWidget(self._zoom_slider)
+
+        zoom_in_label = QLabel("+")
+        zoom_in_label.setStyleSheet("color: #ffffff; font-size: 14px;")
+        zoom_layout.addWidget(zoom_in_label)
+
+        self._zoom_label = QLabel("100%")
+        self._zoom_label.setStyleSheet("color: #ffffff; min-width: 40px;")
+        self._zoom_label.setAlignment(Qt.AlignCenter)
+        zoom_layout.addWidget(self._zoom_label)
+
+        self.addPermanentWidget(zoom_widget)
+
+    def update_info(self, file_name: str, page: int, total: int, zoom: float):
+        self._file_label.setText(file_name)
+        self._page_entry.setText(str(page + 1) if total > 0 else "0")
+        self._page_total.setText(f"/ {total}")
+        self._zoom_slider.blockSignals(True)
+        self._zoom_slider.setValue(int(zoom * 100))
+        self._zoom_slider.blockSignals(False)
+        self._zoom_label.setText(f"{int(zoom * 100)}%")
+
+    def _on_zoom_slider(self, value):
+        zoom = value / 100.0
+        self._zoom_label.setText(f"{value}%")
+        self.zoom_requested.emit(zoom)
+
+    def _on_page_entry(self):
         try:
-            page = int(self.page_var.get()) - 1
+            page = int(self._page_entry.text()) - 1
+            self.page_requested.emit(page)
         except ValueError:
-            return
-        if 0 <= page < self._total_pages:
-            self.app_ref.main_window.viewport.go_to_page(page)
+            pass

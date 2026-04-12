@@ -7,7 +7,7 @@ from app.config import RECENT_FILES_MAX
 class RecentFiles:
     def __init__(self, path: str | None = None):
         if path is None:
-            self._path = Path.home() / ".pdf_editor" / "recent_files.json"
+            self._path = Path.home() / ".docview" / "recent_files.json"
         else:
             self._path = Path(path)
         self._files: list[str] = []

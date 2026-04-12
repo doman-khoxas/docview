@@ -1,37 +1,33 @@
 """Click-to-place freetext annotation tool."""
+from PyQt5.QtWidgets import QInputDialog
+from PyQt5.QtCore import QPointF
 from app.tools.base_tool import BaseTool
 from app.core.annotation_model import FreetextAnnotation
-from app.core.pdf_renderer import canvas_to_pdf_coords
 
 
 class TextTool(BaseTool):
-    def __init__(self, app_ref):
-        super().__init__(app_ref)
+    def __init__(self, main_window):
+        super().__init__(main_window)
 
-    def on_press(self, x: float, y: float):
+    def on_press(self, page_pos: QPointF):
         pass
 
-    def on_drag(self, x: float, y: float):
+    def on_drag(self, page_pos: QPointF):
         pass
 
-    def on_release(self, x: float, y: float):
-        from app.ui.dialogs.text_input_dialog import TextInputDialog
+    def on_release(self, page_pos: QPointF):
+        _, px, py = self.page_to_pdf(page_pos)
 
-        zoom = self.viewport.zoom
-        px, py = canvas_to_pdf_coords(x, y, zoom)
-
-        dialog = TextInputDialog(self.app_ref)
-        self.app_ref.wait_window(dialog)
-
-        text = dialog.result
-        if text:
+        text, ok = QInputDialog.getMultiLineText(
+            self.main_window, "Add Text", "Enter text:")
+        if ok and text:
             annot = FreetextAnnotation(
                 page_num=self.viewport.current_page,
                 x=px, y=py,
                 text=text,
-                font_size=self.properties.font_size,
-                text_color=self.properties.stroke_color,
-                opacity=self.properties.opacity,
+                font_size=self.font_size,
+                text_color=self.stroke_color,
+                opacity=self.opacity,
             )
-            self.app_ref.pdf_doc.add_pending_annotation(self.viewport.current_page, annot)
-            self.viewport.render_current_page()
+            self._add_annotation(self.viewport.current_page, annot)
+            self._refresh_page()

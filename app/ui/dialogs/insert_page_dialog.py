@@ -1,69 +1,64 @@
-"""Dialog for inserting a blank page or pages from another PDF."""
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
+"""Dialog for inserting pages."""
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QRadioButton, QPushButton, QFileDialog, QMessageBox,
+    QDialogButtonBox, QButtonGroup
+)
 from app.core.page_operations import insert_blank_page, insert_pages_from_file
 
 
-class InsertPageDialog(ctk.CTkToplevel):
-    def __init__(self, app_ref):
-        super().__init__(app_ref)
-        self.app_ref = app_ref
-        self.title("Insert Page")
-        self.geometry("380x250")
+class InsertPageDialog(QDialog):
+    def __init__(self, pdf_doc, current_page: int, parent=None):
+        super().__init__(parent)
+        self._doc = pdf_doc
+        self.setWindowTitle("Insert Page")
+        self.resize(380, 200)
+        self._setup_ui(current_page)
 
-        doc = app_ref.pdf_doc
-        if not doc.is_open:
-            self.destroy()
-            return
+    def _setup_ui(self, current_page):
+        layout = QVBoxLayout(self)
 
-        vp = app_ref.main_window.viewport
-        current = vp.current_page
+        pos_row = QHBoxLayout()
+        pos_row.addWidget(QLabel("Insert after page:"))
+        self._pos_entry = QLineEdit(str(current_page + 1))
+        self._pos_entry.setFixedWidth(60)
+        pos_row.addWidget(self._pos_entry)
+        pos_row.addStretch()
+        layout.addLayout(pos_row)
 
-        ctk.CTkLabel(self, text="Insert page after:",
-                     font=ctk.CTkFont(size=13, weight="bold")).pack(pady=(10, 5))
+        self._blank_radio = QRadioButton("Insert blank page")
+        self._blank_radio.setChecked(True)
+        self._file_radio = QRadioButton("Insert from file")
+        group = QButtonGroup(self)
+        group.addButton(self._blank_radio)
+        group.addButton(self._file_radio)
+        layout.addWidget(self._blank_radio)
+        layout.addWidget(self._file_radio)
 
-        pos_frame = ctk.CTkFrame(self, fg_color="transparent")
-        pos_frame.pack(pady=5)
-        ctk.CTkLabel(pos_frame, text="After page:").pack(side="left", padx=5)
-        self._pos_entry = ctk.CTkEntry(pos_frame, width=60)
-        self._pos_entry.pack(side="left")
-        self._pos_entry.insert(0, str(current + 1))
-
-        self._mode = ctk.StringVar(value="blank")
-        ctk.CTkRadioButton(self, text="Insert blank page", variable=self._mode, value="blank").pack(pady=5)
-        ctk.CTkRadioButton(self, text="Insert from file", variable=self._mode, value="file").pack(pady=5)
-
-        action_frame = ctk.CTkFrame(self, fg_color="transparent")
-        action_frame.pack(pady=15)
-        ctk.CTkButton(action_frame, text="Insert", width=100, command=self._insert).pack(side="left", padx=5)
-        ctk.CTkButton(action_frame, text="Cancel", width=100, command=self.destroy).pack(side="left", padx=5)
+        buttons = QDialogButtonBox()
+        insert_btn = buttons.addButton("Insert", QDialogButtonBox.AcceptRole)
+        insert_btn.clicked.connect(self._insert)
+        buttons.addButton(QDialogButtonBox.Cancel).clicked.connect(self.reject)
+        layout.addWidget(buttons)
 
     def _insert(self):
         try:
-            pos = int(self._pos_entry.get())
+            pos = int(self._pos_entry.text())
         except ValueError:
-            messagebox.showerror("Error", "Invalid page number.", parent=self)
+            QMessageBox.critical(self, "Error", "Invalid page number.")
             return
 
-        doc = self.app_ref.pdf_doc
-
-        if self._mode.get() == "blank":
-            insert_blank_page(doc.doc, pos)
-            doc.modified = True
+        if self._blank_radio.isChecked():
+            insert_blank_page(self._doc.doc, pos)
+            self._doc.modified = True
+            self.accept()
         else:
-            path = filedialog.askopenfilename(
-                filetypes=[("PDF files", "*.pdf")], parent=self
-            )
+            path, _ = QFileDialog.getOpenFileName(self, "Select PDF", "", "PDF Files (*.pdf)")
             if not path:
                 return
             try:
-                insert_pages_from_file(doc.doc, pos, path)
-                doc.modified = True
+                insert_pages_from_file(self._doc.doc, pos, path)
+                self._doc.modified = True
+                self.accept()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to insert pages:\n{e}", parent=self)
-                return
-
-        self.app_ref.main_window.viewport.load_document()
-        self.app_ref.main_window.sidebar.refresh()
-        self.app_ref.update_status()
-        self.destroy()
+                QMessageBox.critical(self, "Error", f"Failed:\n{e}")

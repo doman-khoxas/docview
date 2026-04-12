@@ -1,58 +1,126 @@
-"""Start screen when no document is open — 'Open File' + recent files list."""
-import customtkinter as ctk
+"""Welcome screen shown when no documents are open."""
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QListWidget,
+    QListWidgetItem
+)
+from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QFont, QColor
 from pathlib import Path
+from app.version import APP_NAME, __version__
+from app.ui.theme import ACCENT, TEXT_SECONDARY, BG_SURFACE, BG_HOVER
 
 
-class WelcomeScreen(ctk.CTkFrame):
-    def __init__(self, parent, app_ref):
-        super().__init__(parent, fg_color=("gray95", "gray14"))
-        self.app_ref = app_ref
+class WelcomeScreen(QWidget):
+    """Start screen with logo, recent files, and quick actions."""
 
-        # center container
-        center = ctk.CTkFrame(self, fg_color="transparent")
-        center.place(relx=0.5, rely=0.4, anchor="center")
+    open_file_requested = pyqtSignal()
+    open_recent_requested = pyqtSignal(str)
 
-        title = ctk.CTkLabel(center, text="PDF Editor",
-                             font=ctk.CTkFont(size=28, weight="bold"))
-        title.pack(pady=(0, 8))
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._recent_files: list[str] = []
+        self._setup_ui()
 
-        subtitle = ctk.CTkLabel(center, text="Open a file to get started",
-                                font=ctk.CTkFont(size=13),
-                                text_color=("gray50", "gray60"))
-        subtitle.pack(pady=(0, 20))
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setSpacing(16)
+        layout.setContentsMargins(40, 40, 40, 40)
 
-        open_btn = ctk.CTkButton(
-            center, text="Open PDF", width=180, height=38,
-            font=ctk.CTkFont(size=14),
-            command=app_ref.open_file_dialog)
-        open_btn.pack(pady=(0, 24))
+        # App name
+        title = QLabel(APP_NAME)
+        title.setFont(QFont("Segoe UI", 36, QFont.Light))
+        title.setStyleSheet(f"color: {ACCENT};")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
 
-        # recent files
-        self._recent_frame = ctk.CTkFrame(center, fg_color="transparent")
-        self._recent_frame.pack(fill="x")
+        # Version
+        ver = QLabel(f"v{__version__}")
+        ver.setFont(QFont("Segoe UI", 12))
+        ver.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        ver.setAlignment(Qt.AlignCenter)
+        layout.addWidget(ver)
 
-        self.refresh_recent()
+        # Subtitle
+        sub = QLabel("PDF Viewer \u2022 Markdown Editor \u2022 Obsidian Integration")
+        sub.setFont(QFont("Segoe UI", 11))
+        sub.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        sub.setAlignment(Qt.AlignCenter)
+        layout.addWidget(sub)
 
-    def refresh_recent(self):
-        for w in self._recent_frame.winfo_children():
-            w.destroy()
+        layout.addSpacing(20)
 
-        recent = self.app_ref.recent_files.get_all()
-        if not recent:
-            return
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+        btn_layout.setAlignment(Qt.AlignCenter)
 
-        header = ctk.CTkLabel(self._recent_frame, text="Recent Files",
-                              font=ctk.CTkFont(size=12, weight="bold"))
-        header.pack(anchor="w", pady=(0, 6))
+        open_btn = QPushButton("  Open File")
+        open_btn.setFont(QFont("Segoe UI", 11))
+        open_btn.setMinimumWidth(160)
+        open_btn.setMinimumHeight(36)
+        open_btn.setDefault(True)
+        open_btn.clicked.connect(self.open_file_requested.emit)
+        btn_layout.addWidget(open_btn)
 
-        for path in recent[:8]:
-            name = Path(path).name
-            display = name if len(name) <= 50 else name[:47] + "..."
-            btn = ctk.CTkButton(
-                self._recent_frame, text=display,
-                anchor="w", fg_color="transparent",
-                hover_color=("gray85", "gray25"),
-                font=ctk.CTkFont(size=11),
-                cursor="hand2",
-                command=lambda p=path: self.app_ref.open_file(p))
-            btn.pack(fill="x", pady=1)
+        layout.addLayout(btn_layout)
+
+        layout.addSpacing(16)
+
+        # Recent files
+        recent_label = QLabel("Recent Files")
+        recent_label.setFont(QFont("Segoe UI", 11, QFont.DemiBold))
+        recent_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        layout.addWidget(recent_label)
+
+        self._recent_list = QListWidget()
+        self._recent_list.setMaximumWidth(500)
+        self._recent_list.setMinimumWidth(400)
+        self._recent_list.setMaximumHeight(200)
+        self._recent_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {BG_SURFACE};
+                border: none;
+                border-radius: 4px;
+            }}
+            QListWidget::item {{
+                padding: 8px 12px;
+                border-bottom: 1px solid #333333;
+            }}
+            QListWidget::item:hover {{
+                background-color: {BG_HOVER};
+            }}
+        """)
+        self._recent_list.itemDoubleClicked.connect(self._on_recent_clicked)
+        layout.addWidget(self._recent_list, alignment=Qt.AlignCenter)
+
+        # Keyboard hints
+        layout.addSpacing(16)
+        hints = QLabel("Ctrl+O  Open File  \u2022  Ctrl+Tab  Switch Tab")
+        hints.setFont(QFont("Segoe UI", 9))
+        hints.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        hints.setAlignment(Qt.AlignCenter)
+        layout.addWidget(hints)
+
+    def refresh_recent(self, recent_files: list[str]):
+        """Update the recent files list."""
+        self._recent_files = recent_files
+        self._recent_list.clear()
+        for path in recent_files:
+            p = Path(path)
+            item = QListWidgetItem()
+            suffix = p.suffix.upper().lstrip(".")
+            item.setText(f"[{suffix}]  {p.name}\n{str(p.parent)}")
+            item.setData(Qt.UserRole, path)
+            self._recent_list.addItem(item)
+
+        if not recent_files:
+            item = QListWidgetItem("No recent files")
+            item.setFlags(item.flags() & ~Qt.ItemIsSelectable)
+            item.setForeground(QColor(TEXT_SECONDARY))
+            self._recent_list.addItem(item)
+
+    def _on_recent_clicked(self, item: QListWidgetItem):
+        path = item.data(Qt.UserRole)
+        if path:
+            self.open_recent_requested.emit(path)

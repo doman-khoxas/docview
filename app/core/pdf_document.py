@@ -1,28 +1,25 @@
-"""Wraps pymupdf.Document with pending annotation storage."""
+"""Wraps pymupdf.Document with pending annotation storage.
+
+Implements the Document ABC for PDF files.
+"""
 import fitz
 from pathlib import Path
+from app.core.document import Document
 
 
-class PDFDocument:
+class PDFDocument(Document):
     def __init__(self):
+        super().__init__()
         self._doc: fitz.Document | None = None
-        self._file_path: str | None = None
-        self._pending_annotations: dict[int, list] = {}  # page_num -> [annotations]
-        self._modified = False
+        self._pending_annotations: dict[int, list] = {}
+
+    @property
+    def content_type(self) -> str:
+        return "pdf"
 
     @property
     def doc(self) -> fitz.Document | None:
         return self._doc
-
-    @property
-    def file_path(self) -> str | None:
-        return self._file_path
-
-    @property
-    def file_name(self) -> str:
-        if self._file_path:
-            return Path(self._file_path).name
-        return "Untitled"
 
     @property
     def is_open(self) -> bool:
@@ -31,14 +28,6 @@ class PDFDocument:
     @property
     def page_count(self) -> int:
         return self._doc.page_count if self._doc else 0
-
-    @property
-    def modified(self) -> bool:
-        return self._modified
-
-    @modified.setter
-    def modified(self, value: bool):
-        self._modified = value
 
     def open(self, file_path: str):
         self.close()
@@ -112,11 +101,9 @@ class PDFDocument:
             for page_num in range(self.page_count):
                 page = self._doc[page_num]
                 pix = page.get_pixmap(dpi=300)
-                # Remove existing annotations
                 while page.annots():
                     annot = page.annots().__next__()
                     page.delete_annot(annot)
-                # Burn page content as image
                 page.clean_contents()
                 img_rect = page.rect
                 page.insert_image(img_rect, pixmap=pix)

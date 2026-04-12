@@ -1,66 +1,69 @@
 """Ink/freehand drawing tool with point decimation."""
+import math
+from PyQt5.QtGui import QPen, QColor, QPainterPath
+from PyQt5.QtCore import QPointF
 from app.tools.base_tool import BaseTool
 from app.core.annotation_model import InkAnnotation
-from app.core.pdf_renderer import canvas_to_pdf_coords
-import math
 
 
 class FreehandTool(BaseTool):
-    MIN_DISTANCE = 3  # minimum pixel distance between recorded points
+    MIN_DISTANCE = 3
 
-    def __init__(self, app_ref):
-        super().__init__(app_ref)
-        self._points = []
-        self._canvas_points = []
+    def __init__(self, main_window):
+        super().__init__(main_window)
+        self._pdf_points = []
+        self._page_points = []
+        self._path_item = None
 
-    def on_press(self, x: float, y: float):
-        self._points.clear()
-        self._canvas_points.clear()
-        self._canvas_points.append((x, y))
+    def on_press(self, page_pos: QPointF):
+        self._pdf_points.clear()
+        self._page_points.clear()
+        self._page_points.append(page_pos)
 
-        zoom = self.viewport.zoom
-        px, py = canvas_to_pdf_coords(x, y, zoom)
-        self._points.append((px, py))
+        _, px, py = self.page_to_pdf(page_pos)
+        self._pdf_points.append((px, py))
 
-    def on_drag(self, x: float, y: float):
-        if not self._canvas_points:
+        scene_pos = self.page_to_scene(page_pos)
+        path = QPainterPath(scene_pos)
+        pen = QPen(QColor(self.stroke_color), self.border_width)
+        pen.setCapStyle(1)   # RoundCap
+        pen.setJoinStyle(0x80)  # RoundJoin
+        self._path_item = self.scene.addPath(path, pen)
+        self._temp_items.append(self._path_item)
+
+    def on_drag(self, page_pos: QPointF):
+        if not self._page_points:
             return
 
-        last_x, last_y = self._canvas_points[-1]
-        dist = math.hypot(x - last_x, y - last_y)
+        last = self._page_points[-1]
+        dist = math.hypot(page_pos.x() - last.x(), page_pos.y() - last.y())
         if dist < self.MIN_DISTANCE:
             return
 
-        self._canvas_points.append((x, y))
-        zoom = self.viewport.zoom
-        px, py = canvas_to_pdf_coords(x, y, zoom)
-        self._points.append((px, py))
+        self._page_points.append(page_pos)
+        _, px, py = self.page_to_pdf(page_pos)
+        self._pdf_points.append((px, py))
 
-        if len(self._canvas_points) >= 2:
-            self._clear_temp()
-            coords = []
-            for cx, cy in self._canvas_points:
-                coords.extend([cx, cy])
-            item = self.canvas.create_line(
-                *coords, fill=self.properties.stroke_color,
-                width=self.properties.border_width,
-                smooth=True, tags="temp_annotation"
-            )
-            self._temp_items.append(item)
+        if self._path_item:
+            path = self._path_item.path()
+            path.lineTo(self.page_to_scene(page_pos))
+            self._path_item.setPath(path)
 
-    def on_release(self, x: float, y: float):
+    def on_release(self, page_pos: QPointF):
         self._clear_temp()
-        if len(self._points) < 2:
+        self._path_item = None
+
+        if len(self._pdf_points) < 2:
             return
 
         annot = InkAnnotation(
             page_num=self.viewport.current_page,
-            color=self.properties.stroke_color,
-            opacity=self.properties.opacity,
-            points=list(self._points),
-            border_width=self.properties.border_width,
+            color=self.stroke_color,
+            opacity=self.opacity,
+            points=list(self._pdf_points),
+            border_width=self.border_width,
         )
-        self.app_ref.pdf_doc.add_pending_annotation(self.viewport.current_page, annot)
-        self.viewport.render_current_page()
-        self._points.clear()
-        self._canvas_points.clear()
+        self._add_annotation(self.viewport.current_page, annot)
+        self._refresh_page()
+        self._pdf_points.clear()
+        self._page_points.clear()
