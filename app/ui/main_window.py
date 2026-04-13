@@ -200,10 +200,8 @@ class MainWindow(QMainWindow):
         self._context_menu = ViewportContextMenu(self)
         self._context_menu.tool_requested.connect(self._on_tool_selected)
         self._context_menu.action_requested.connect(self.handle_toolbar_action)
-        self._pdf_viewport.setContextMenuPolicy(Qt.CustomContextMenu)
-        self._pdf_viewport.customContextMenuRequested.connect(
-            lambda pos: self._context_menu.exec_(self._pdf_viewport.mapToGlobal(pos))
-        )
+        # Context menu handled via viewport.contextMenuEvent override
+        # (ScrollHandDrag mode eats customContextMenuRequested signals)
 
     def _setup_status_bar(self):
         self._status_bar = DocStatusBar()

@@ -90,6 +90,16 @@ class PDFViewport(QGraphicsView):
         local_y = max(0, min(scene_pos.y() - rect.top(), rect.height()))
         return best, QPointF(local_x, local_y)
 
+    # ── Context menu (overrides ScrollHandDrag eating right-click) ──
+
+    def contextMenuEvent(self, event):
+        """Always show context menu on right-click, regardless of drag mode."""
+        if self._tool_owner and hasattr(self._tool_owner, '_context_menu'):
+            self._tool_owner._context_menu.exec_(event.globalPos())
+            event.accept()
+            return
+        super().contextMenuEvent(event)
+
     # ── Mouse event routing to tools ──
 
     def mousePressEvent(self, event: QMouseEvent):
