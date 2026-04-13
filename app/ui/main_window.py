@@ -361,6 +361,11 @@ class MainWindow(QMainWindow):
     # ── Toolbar actions ──
 
     def handle_toolbar_action(self, action_name: str):
+        # Sticky note works regardless of document state
+        if action_name == "new_sticky":
+            self.create_sticky_note()
+            return
+
         doc = self.doc_manager.active_document
         if not doc or not doc.is_open or doc.content_type != "pdf":
             return

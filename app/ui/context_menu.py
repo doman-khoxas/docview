@@ -24,3 +24,5 @@ class ViewportContextMenu(QMenu):
         self.addSeparator()
         self.addAction("Rotate Page", lambda: self.action_requested.emit("rotate_cw"))
         self.addAction("Delete Page", lambda: self.action_requested.emit("delete_page"))
+        self.addSeparator()
+        self.addAction("New Sticky Note", lambda: self.action_requested.emit("new_sticky"))

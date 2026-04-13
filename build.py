@@ -111,6 +111,10 @@ def build_app(onedir=False):
         "PyQt5", "PyQt5.QtWidgets", "PyQt5.QtCore", "PyQt5.QtGui",
         "PIL", "PIL.Image",
         "markdown", "yaml",
+        "markdown.extensions", "markdown.extensions.tables",
+        "markdown.extensions.fenced_code", "markdown.extensions.toc",
+        "markdown.extensions.nl2br", "markdown.extensions.sane_lists",
+        "markdown.extensions.meta", "markdown.extensions.codehilite",
     ]
     for hi in hidden_imports:
         cmd.extend(["--hidden-import", hi])

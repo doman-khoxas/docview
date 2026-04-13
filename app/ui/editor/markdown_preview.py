@@ -94,10 +94,15 @@ class MarkdownPreview(QTextBrowser):
             }}
         """)
 
-        self._md = markdown.Markdown(extensions=[
-            'meta', 'tables', 'fenced_code', 'codehilite',
-            'toc', 'nl2br', 'sane_lists'
-        ])
+        # Only use extensions that PyInstaller reliably bundles
+        exts = []
+        for ext in ['tables', 'fenced_code', 'toc', 'nl2br', 'sane_lists', 'meta', 'codehilite']:
+            try:
+                markdown.Markdown(extensions=[ext])
+                exts.append(ext)
+            except Exception:
+                pass
+        self._md = markdown.Markdown(extensions=exts)
 
     def update_preview(self, text: str):
         """Convert markdown text to HTML and display."""
