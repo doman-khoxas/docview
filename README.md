@@ -92,46 +92,31 @@ python docview.py --version
 
 ## Build & Install
 
-### Portable Executable
+### DocSetup — Combined Installer
+
+Builds DocView + DocNotes and compiles a single Windows installer.
+Requires [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ```bash
 pip install pyinstaller
 
-# Single executable
-python build.py
+# Build both apps + combined installer
+python build_setup.py
 
-# Directory bundle (faster startup)
-python build.py --onedir
+# Clean first
+python build_setup.py --clean
 
-# Clean + build
-python build.py --clean
+# Build DocView only
+python build_setup.py --docview
+
+# Build DocNotes only
+python build_setup.py --docnotes
+
+# Build apps without installer
+python build_setup.py --no-installer
 ```
 
-### Windows Installer
-
-Requires [Inno Setup 6](https://jrsoftware.org/isdl.php) installed.
-
-```bash
-# One command: builds app + compiles installer
-python build.py --installer
-
-# Output: DocView_2.0.0_Setup.exe
-```
-
-The installer provides:
-- Start Menu and Desktop shortcuts
-- Optional `.pdf` and `.md` file associations
-- "Open With" integration in Windows Explorer
-- Clean uninstaller via Add/Remove Programs
-- System tray icon for sticky notes
-
-### Regenerate Icon
-
-```bash
-python build.py --icon
-```
-
-Output: `dist/DocView.exe` (portable) or `DocView_2.0.0_Setup.exe` (installer).
+Output: `DocSetup_2.2.0.exe` — installs both apps with component selection (Full / DocView only / DocNotes only).
 
 ## Requirements
 

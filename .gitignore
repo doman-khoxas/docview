@@ -21,5 +21,7 @@ package-lock.json
 web/uploads/
 
 # Installer output
+DocSetup_*.exe
 DocView_*_Setup.exe
+DocNotes_*_Setup.exe
 .claude/

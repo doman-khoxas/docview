@@ -181,11 +181,15 @@ def _run_ocr(input_path: str, output_path: str, language: str = "eng"):
     """Run ocrmypdf optimized for screenshot PDFs."""
     import subprocess
 
+    # Normalize to absolute OS-native paths (ocrmypdf needs this on Windows)
+    input_path = os.path.abspath(input_path)
+    output_path = os.path.abspath(output_path)
+
     cmd = [
         "ocrmypdf",
-        "--force-ocr",          # screenshots have no text layer
-        "--optimize", "1",      # lossless optimization
-        "--jobs", "4",          # parallel page processing
+        "--force-ocr",              # screenshots have no text layer
+        "--optimize", "1",          # lossless optimization
+        "--jobs", "4",              # parallel page processing
         "--tesseract-timeout", "60",
         "--output-type", "pdf",
     ]

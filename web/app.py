@@ -6,7 +6,7 @@ import sys
 # Add project root to path so `app.core.*` imports work
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, send_from_directory
 from flask_cors import CORS
 
 from web.config import UPLOAD_FOLDER, MAX_CONTENT_LENGTH
@@ -39,6 +39,10 @@ def create_app() -> Flask:
     @app.route("/viewer/<doc_id>")
     def viewer(doc_id):
         return render_template("viewer.html", doc_id=doc_id)
+
+    @app.route("/favicon.ico")
+    def favicon():
+        return send_from_directory(app.static_folder, "favicon.ico", mimetype="image/x-icon")
 
     return app
 

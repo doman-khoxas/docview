@@ -79,36 +79,22 @@ Default vault: `~/.docnotes/`
 
 ## Build Executable
 
-**Important**: Run all build commands from the **project root** (`docview/`), not from `docnotes/`.
-
-### Portable Executable (single .exe)
+Run from the **project root** (`docview/`), not from `docnotes/`.
 
 ```bash
-cd C:\Users\gt8le\Operator\Documents\Code\GitHub\docview
 pip install pyinstaller
-python build_docnotes.py
+
+# Build DocNotes only
+python build_setup.py --docnotes
+
+# Build both DocView + DocNotes + combined installer
+python build_setup.py
+
+# Clean first
+python build_setup.py --clean
 ```
 
-Output: `dist/DocNotes.exe`
-
-### Directory Bundle (faster startup)
-
-```bash
-python build_docnotes.py --onedir
-```
-
-Output: `dist/DocNotes/DocNotes.exe`
-
-### Clean + Build
-
-```bash
-python build_docnotes.py --clean
-```
-
-### Windows Installer
-
-After building with `--onedir`, use Inno Setup to create a proper installer.
-See the DocView `installer.iss` as a template — change `MyAppName` to `DocNotes`.
+Output: `DocSetup_2.2.0.exe` (combined installer with component selection).
 
 ## Vault Structure
 
